@@ -1,6 +1,7 @@
 package pipeline
 
 import (
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -8,13 +9,15 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/mproffitt/tiyo/config"
+	"github.com/choclab-net/tiyo/config"
+	log "github.com/sirupsen/logrus"
 )
 
 type Pipeline struct {
 	Name     string
 	Commands map[string]*Command
 	Links    map[string]*LinkInterface
+	Config   *config.Config
 }
 
 func (pipeline *Pipeline) GetCommand(id string) *Command {
@@ -29,6 +32,7 @@ func (pipeline *Pipeline) GetLinksTo(command *Command) []*LinkInterface {
 	links := make([]*LinkInterface, 0)
 	for _, link := range pipeline.Links {
 		if (*link).GetLink().Target == command.Id {
+			log.Debug("Link is target", link)
 			links = append(links, link)
 		}
 	}
@@ -39,6 +43,7 @@ func (pipeline *Pipeline) GetLinksFrom(command *Command) []*LinkInterface {
 	links := make([]*LinkInterface, 0)
 	for _, link := range pipeline.Links {
 		if (*link).GetLink().Source == command.Id {
+			log.Debug("Link is source", link)
 			links = append(links, link)
 		}
 	}
@@ -46,7 +51,7 @@ func (pipeline *Pipeline) GetLinksFrom(command *Command) []*LinkInterface {
 }
 
 // Gets a list of all IDs which have no inputs from other elements
-func (pipeline *Pipeline) GetStart() []string {
+func (pipeline *Pipeline) GetStartIds() []string {
 	linkSources := make([]string, 0)
 	startingPoints := make([]string, 0)
 
@@ -72,7 +77,18 @@ func (pipeline *Pipeline) GetStart() []string {
 	return startingPoints
 }
 
-func (pipeline *Pipeline) GetEnd() []string {
+func (pipeline *Pipeline) GetStart() []*Command {
+	log.Debug("Getting commands at start of pipeline")
+	ids := pipeline.GetStartIds()
+	commands := make([]*Command, 0)
+	for _, id := range ids {
+		commands = append(commands, pipeline.Commands[id])
+	}
+	log.Debug(commands)
+	return commands
+}
+
+func (pipeline *Pipeline) GetEndIds() []string {
 	linkSources := make([]string, 0)
 	endPoints := make([]string, 0)
 
@@ -185,7 +201,9 @@ func GetPipeline(config *config.Config, name string) (*Pipeline, error) {
 	pipeline.Name = name
 	pipeline.Commands = make(map[string]*Command)
 	pipeline.Links = make(map[string]*LinkInterface)
+	pipeline.Config = config
 
+	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: config.UseInsecureTLS}
 	response, err := http.Get(fmt.Sprintf("%s/api/v1/bucket/pipeline/%s", config.AssembleServer(), name))
 	if err != nil {
 		return nil, err
@@ -218,11 +236,15 @@ func GetPipeline(config *config.Config, name string) (*Pipeline, error) {
 		return nil, err
 	}
 
+	// issue#18
+	// When parsing the pipeline, any errors / missing required variables
+	// should be sent back to the browser as a map of "id:[errors]"
 	for _, c := range content["cells"].([]interface{}) {
 		cell := c.(map[string]interface{})
 		switch cell["type"].(string) {
 		case "container.Element":
 			command := NewCommand(cell)
+			command.Image = pipeline.GetImageTagName(command)
 			pipeline.Commands[command.Id] = command
 		case "link":
 			link := NewLink(cell)
@@ -235,5 +257,27 @@ func GetPipeline(config *config.Config, name string) (*Pipeline, error) {
 		}
 	}
 	return &pipeline, nil
+}
 
+func (pipeline *Pipeline) GetImageTagName(command *Command) string {
+	// A bit messy but gets 'image' from 'owner/image:version'
+	var name string
+	if command.Name != "" {
+		nameSlice := strings.Split(command.Name, "/")
+		name = nameSlice[len(nameSlice)-1]
+		nameSlice = strings.Split(name, ":")
+		name = nameSlice[0]
+	} else {
+		name = command.Language
+	}
+
+	image := fmt.Sprintf("%s-tiyo:%s", name, command.Version)
+	var tag string = image
+	if pipeline.Config.Docker.Primary != "" {
+		tag = fmt.Sprintf("%s/%s", pipeline.Config.Docker.Primary, image)
+	}
+	if pipeline.Config.Docker.Registry != "" {
+		tag = fmt.Sprintf("%s/%s", pipeline.Config.Docker.Registry, tag)
+	}
+	return tag
 }

@@ -26,7 +26,7 @@ type Kubernetes struct {
 type Docker struct {
 	Registry   string `json:"registry"`
 	Username   string `json:"username"` // Future - to come from Vault
-	Token      string `json:"apikey"`   // Future - to come from Vault
+	Token      string `json:"token"`    // Future - to come from Vault
 	Upstream   string `json:"upstream"`
 	Primary    string `json:"primary"`
 	SameSource bool   `default:"false"`
@@ -35,6 +35,7 @@ type Docker struct {
 type Config struct {
 	SequenceBaseDir string     `json:"sequenceBaseDir"`
 	Dbname          string     `json:"dbname"`
+	UseInsecureTLS  bool       `json:"skip_verify"`
 	Assemble        Host       `json:"assemble"`
 	Flow            Host       `json:"flow"`
 	Kubernetes      Kubernetes `json:"cluster"`

@@ -6,8 +6,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/mproffitt/tiyo/config"
-	"github.com/mproffitt/tiyo/pipeline"
+	"github.com/choclab-net/tiyo/config"
+	"github.com/choclab-net/tiyo/pipeline"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -76,6 +76,10 @@ func (kube *Kubernetes) DeploymentExists(name string) bool {
 	return kube.GetDeployment(name) != nil
 }
 
+func (kube *Kubernetes) IsExistingResource(name string) bool {
+	return kube.DeploymentExists(name) || kube.StatefulSetExists(name)
+}
+
 func (kube *Kubernetes) GetMaxReplicas(instances []*pipeline.Command) *int32 {
 	// set at 30 but should be ((nodes/max_containers_in_pipeline) - persistant_containers) / (CPU|RAM|CAPACITY)
 	// instance.Scale must always be less than this number - if not, it gets truncated.
@@ -138,6 +142,10 @@ func (kube *Kubernetes) GetStatefulSetContainers(instances []*pipeline.Command) 
 	}
 	return containers
 }
+
+func (kube *Kubernetes) CreateServiceAccount() {}
+
+func (kube *Kubernetes) CreateService() {}
 
 func (kube *Kubernetes) CreateDeployment(pipelineName string, groupName string, instances []*pipeline.Command) {
 	name := strings.Trim(kube.NameExp.ReplaceAllString(groupName, "-"), "-")

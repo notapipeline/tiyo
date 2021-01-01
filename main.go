@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/mproffitt/tiyo/command"
+	"github.com/choclab-net/tiyo/command"
 )
 
 func main() {

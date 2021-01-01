@@ -1,7 +1,7 @@
 /**
  * A webserver base GUI and API for managing a server.ApiDB
  *
- * @author Martin Proffitt <mproffitt@choclab.net>
+ * @author Martin Proffitt <choclab-net@choclab.net>
  *
  * Build:
  * go-bindata-assetfs -o web_static.go web/... && go build .
@@ -17,7 +17,7 @@ import (
 	"github.com/gin-contrib/multitemplate"
 	"github.com/gin-contrib/static"
 	"github.com/gin-gonic/gin"
-	"github.com/mproffitt/tiyo/config"
+	"github.com/choclab-net/tiyo/config"
 
 	log "github.com/sirupsen/logrus"
 )

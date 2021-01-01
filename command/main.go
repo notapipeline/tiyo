@@ -5,8 +5,10 @@ import (
 	"os"
 	"path/filepath"
 
-	server "github.com/mproffitt/tiyo/server"
-	watch "github.com/mproffitt/tiyo/watch"
+	flow "github.com/choclab-net/tiyo/flow"
+	server "github.com/choclab-net/tiyo/server"
+	watch "github.com/choclab-net/tiyo/watch"
+	log "github.com/sirupsen/logrus"
 )
 
 const VERSION string = "v0.0.1a"
@@ -25,6 +27,22 @@ var acceptedCommands = []string{
 	"version",
 }
 
+func SetupLog() {
+	var level string = os.Getenv("TIYO_LOG")
+	if level == "" {
+		level = "info"
+	}
+	switch level {
+	case "trace":
+		log.SetLevel(log.TraceLevel)
+		log.SetReportCaller(true)
+	case "debug":
+		log.SetLevel(log.DebugLevel)
+	case "info":
+		log.SetLevel(log.InfoLevel)
+	}
+}
+
 func Usage() {
 	fmt.Printf("USAGE: %s [COMMAND] [FLAGS]:\n", filepath.Base(os.Args[0]))
 	for _, command := range acceptedCommands {
@@ -35,6 +53,7 @@ func Usage() {
 }
 
 func Run(args []string) int {
+	SetupLog()
 	var command string = "help"
 	if len(args) != 0 {
 		for _, c := range acceptedCommands {
@@ -64,6 +83,7 @@ func Run(args []string) int {
 	case "fill":
 		instance = watch.NewWatch()
 	case "flow":
+		instance = flow.NewFlow()
 		break
 	case "syphon":
 		break

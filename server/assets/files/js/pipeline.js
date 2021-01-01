@@ -535,7 +535,7 @@ links['file'] = new joint.dia.Link({
         $('#appscale').val(appelement.attributes.scale);
         $('#appcmd').val(appelement.attributes.command);
         $('#appargs').val(appelement.attributes.arguments);
-        $('#apversion').val(appelement.attributes.version);
+        $('#appversion').val(appelement.attributes.version);
         $('#aptimeout').val(appelement.attributes.timeout);
 
         if (appelement.attributes.script) {

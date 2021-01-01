@@ -113,6 +113,14 @@ Additionally, the chart is saved each time properties are added to/altered on an
 At present, there is no way to delete a pipeline via the GUI although it is possible to delete a pipeline by executing
 a HTTP DELETE request using the [API](docs/api.md).
 
+## Installation
+```
+go get
+go-bindata-assetfs -o server/assets.go -pkg server server/assets/...
+go build .
+mv tiyo ${GOPATH}/bin/
+```
+
 ## Dependencies
 Tiyo relies on a number of dependencies for its build and execution. These are split into two categories:
 
