@@ -43,7 +43,7 @@ func (flow *Flow) Init() {
 		os.Exit(1)
 	}
 	flow.PipelineBucket = strings.ToLower(strings.ReplaceAll(flow.Name, " ", "_"))
-	log.Trace("Flow initialised", flow)
+	log.Debug("Flow initialised", flow)
 }
 
 /**
@@ -58,19 +58,16 @@ func (flow *Flow) Create(instance *pipeline.Command) error {
 		}
 	}
 
+	var err error
 	var containerExists bool = false
-	if instance.UseExisting {
-		_, err := flow.Docker.ContainerExists(containerName, instance.Version)
-		if err != nil {
-			return err
-		}
-		containerExists = true
+	containerExists, err = flow.Docker.ContainerExists(instance.Image)
+	if err != nil {
+		return err
 	}
 
 	if containerExists {
-		if flow.Kubernetes.IsExistingResource(containerName) {
-			return nil
-		}
+		log.Info("Not building image for ", instance.Name, ":", instance.Version, " Image exists")
+		return nil
 	}
 
 	path := fmt.Sprintf("containers/%s", containerName)
@@ -79,7 +76,7 @@ func (flow *Flow) Create(instance *pipeline.Command) error {
 		owd, _ := os.Getwd()
 		os.MkdirAll(path, 0775)
 		os.Chdir(path)
-		log.Trace("Changing to build path", path)
+		log.Debug("Changing to build path", path)
 		if err := flow.WriteDockerfile(containerName, instance.Version); err != nil {
 			return flow.Cleanup(path, owd, err)
 		}
@@ -109,9 +106,9 @@ func (flow *Flow) Cleanup(path string, owd string, err error) error {
 }
 
 func (flow *Flow) WriteDockerfile(containerName string, containerVersion string) error {
-	log.Trace("Creating Dockerfile", containerName, containerVersion)
+	log.Debug("Creating Dockerfile", containerName, containerVersion)
 	var name string = "Dockerfile"
-	template := fmt.Sprintf(dockerTemplate, containerName, containerVersion, flow.Name)
+	template := fmt.Sprintf(dockerTemplate, containerName, containerVersion)
 	file, err := os.Create(name)
 	if err != nil {
 		return fmt.Errorf("Failed to create Dockerfile for %s. %s", containerName, err)
@@ -121,12 +118,12 @@ func (flow *Flow) WriteDockerfile(containerName string, containerVersion string)
 		return fmt.Errorf("Failed to write Dockerfile for %s. Error was: %s", name, err)
 	}
 	file.Sync()
-	log.Trace("Dockerfile written:", containerName, containerVersion)
+	log.Debug("Dockerfile written:", containerName, containerVersion)
 	return nil
 }
 
 func (flow *Flow) CopyTiyoBinary() error {
-	log.Trace("Copying tiyo binary")
+	log.Debug("Copying tiyo binary")
 
 	path, err := os.Executable()
 	if err != nil {
@@ -160,7 +157,7 @@ func (flow *Flow) CopyTiyoBinary() error {
 }
 
 func (flow *Flow) WriteConfig() error {
-	log.Trace("Creating stub config for container wrap")
+	log.Debug("Creating stub config for container wrap")
 	config := struct {
 		SequenceBaseDir string      `json:"sequenceBaseDir"`
 		UseInsecureTLS  bool        `json:"skip_verify"`

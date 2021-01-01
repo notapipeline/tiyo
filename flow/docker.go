@@ -5,12 +5,15 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net/http"
 	"os"
+	"strings"
 
 	log "github.com/sirupsen/logrus"
 
@@ -43,8 +46,48 @@ func NewDockerEngine(config *config.Config) *Docker {
 
 // if pod does not exist, has it previously been built?
 // e.g. curl https://registry.hub.docker.com/v1/repositories/choclab/[NAME]/tags
-func (docker *Docker) ContainerExists(name string, version string) (string, error) {
-	return "", nil
+func (docker *Docker) ContainerExists(tag string) (bool, error) {
+	parts := strings.Split(tag, ":")
+	var name string = parts[0]
+	var version string = parts[1]
+	log.Info("Checking registry for ", name, " ", version)
+	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{
+		InsecureSkipVerify: docker.Config.UseInsecureTLS,
+	}
+
+	var apiAddress string = "https://registry.hub.docker.com/v1/repositories"
+	var address string = fmt.Sprintf("%s/%s/tags", apiAddress, name)
+	log.Debug("Making request to ", address)
+	response, err := http.Get(address)
+	if err != nil {
+		return false, err
+	}
+
+	defer response.Body.Close()
+	tags := make([]struct {
+		Layer string `json:"layer"`
+		Name  string `json:"name"`
+	}, 0)
+
+	body, err := ioutil.ReadAll(response.Body)
+	log.Debug(string(body))
+	if err != nil {
+		return false, err
+	}
+	err = json.Unmarshal(body, &tags)
+	if err != nil {
+		return false, err
+	}
+
+	var found bool = false
+	for _, v := range tags {
+		if v.Name == version {
+			found = true
+			break
+		}
+	}
+
+	return found, nil
 }
 
 func (docker *Docker) Build(tag string) error {
