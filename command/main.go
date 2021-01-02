@@ -5,9 +5,10 @@ import (
 	"os"
 	"path/filepath"
 
-	flow "github.com/choclab-net/tiyo/flow"
-	server "github.com/choclab-net/tiyo/server"
-	watch "github.com/choclab-net/tiyo/watch"
+	"github.com/choclab-net/tiyo/flow"
+	"github.com/choclab-net/tiyo/server"
+	"github.com/choclab-net/tiyo/syphon"
+	"github.com/choclab-net/tiyo/watch"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -86,6 +87,7 @@ func Run(args []string) int {
 		instance = flow.NewFlow()
 		break
 	case "syphon":
+		instance = syphon.NewSyphon()
 		break
 	}
 

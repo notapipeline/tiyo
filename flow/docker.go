@@ -55,6 +55,10 @@ func (docker *Docker) ContainerExists(tag string) (bool, error) {
 		InsecureSkipVerify: docker.Config.UseInsecureTLS,
 	}
 
+	// API is the easiest but maybe not the most versatile method of checking
+	// This will be potentially very different for artifactory/nexus/quay and
+	// it may not be instantly recognisable from the URL that the API is a
+	// different endpoint.
 	var apiAddress string = "https://registry.hub.docker.com/v1/repositories"
 	var address string = fmt.Sprintf("%s/%s/tags", apiAddress, name)
 	log.Debug("Making request to ", address)
@@ -86,7 +90,6 @@ func (docker *Docker) ContainerExists(tag string) (bool, error) {
 			break
 		}
 	}
-
 	return found, nil
 }
 

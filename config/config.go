@@ -21,6 +21,7 @@ type Host struct {
 type Kubernetes struct {
 	ConfigFile string `json:"kubeconfig"`
 	Namespace  string `json:"namespace"`
+	Volume     string `json:"volume"`
 }
 
 type Docker struct {
@@ -38,7 +39,7 @@ type Config struct {
 	UseInsecureTLS  bool       `json:"skip_verify"`
 	Assemble        Host       `json:"assemble"`
 	Flow            Host       `json:"flow"`
-	Kubernetes      Kubernetes `json:"cluster"`
+	Kubernetes      Kubernetes `json:"kubernetes"`
 	Docker          Docker     `json:"docker"`
 }
 

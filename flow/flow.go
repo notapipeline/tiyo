@@ -19,6 +19,7 @@ import (
 type Flow struct {
 	Name           string
 	PipelineBucket string
+	Update         bool
 	Config         *config.Config
 	Pipeline       *pipeline.Pipeline
 	Docker         *Docker
@@ -37,6 +38,7 @@ func (flow *Flow) Init() {
 	description := "The name of the pipeline to use"
 	flow.Flags = flag.NewFlagSet("flow", flag.ExitOnError)
 	flow.Flags.StringVar(&flow.Name, "p", flow.Name, description)
+	flow.Flags.BoolVar(&flow.Update, "u", false, "Update any containers")
 	flow.Flags.Parse(os.Args[2:])
 	if flow.Name == "" {
 		flow.Flags.Usage()
@@ -65,7 +67,7 @@ func (flow *Flow) Create(instance *pipeline.Command) error {
 		return err
 	}
 
-	if containerExists {
+	if containerExists && !flow.Update {
 		log.Info("Not building image for ", instance.Name, ":", instance.Version, " Image exists")
 		return nil
 	}
@@ -158,14 +160,17 @@ func (flow *Flow) CopyTiyoBinary() error {
 
 func (flow *Flow) WriteConfig() error {
 	log.Debug("Creating stub config for container wrap")
+	path, _ := os.Getwd()
 	config := struct {
 		SequenceBaseDir string      `json:"sequenceBaseDir"`
 		UseInsecureTLS  bool        `json:"skip_verify"`
 		Assemble        config.Host `json:"assemble"`
+		AppName         string      `json:"appname"`
 	}{
 		SequenceBaseDir: flow.Config.SequenceBaseDir,
 		UseInsecureTLS:  flow.Config.UseInsecureTLS,
 		Assemble:        flow.Config.Assemble,
+		AppName:         filepath.Base(path),
 	}
 	bytes, err := json.Marshal(config)
 	if err != nil {
@@ -201,6 +206,7 @@ func (flow *Flow) Run() int {
 		return 1
 	}
 
+	// This should be "Pipeline.Commands" - GetStart is only for minimal-set testing
 	start := flow.Pipeline.GetStart()
 	for _, command := range start {
 		log.Debug("Pipeline start item", command)
@@ -209,6 +215,11 @@ func (flow *Flow) Run() int {
 			log.Fatal(err)
 		}
 	}
+
+	flow.Kubernetes = NewKubernetes(flow.Config, flow.Pipeline)
+	flow.Kubernetes.CreateNamespace()
+	flow.Kubernetes.CreateStatefulSet(flow.Pipeline.Name, "tiyo", start)
+	//flow.Kubernetes.CreateDaemonSet(flow.Pipeline.Name, "tiyo", start)
 
 	log.Info("Flow complete")
 	return 0
