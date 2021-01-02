@@ -276,11 +276,6 @@ func (kube *Kubernetes) DeleteDeployment(name string) {
 	}
 }
 
-func (kube *Kubernetes) Sanitize(pipeline string, name string) (string, string, string) {
-	pipeline = strings.Trim(kube.NameExp.ReplaceAllString(pipeline, "-"), "-")
-	name = strings.Trim(kube.NameExp.ReplaceAllString(name, "-"), "-")
-	return pipeline, name, strings.ToLower(fmt.Sprintf("%s-%s", pipeline, name))
-}
 func (kube *Kubernetes) CreateDeployment(pipeline string, name string, instances []*pipeline.Command) {
 	var depName string
 	pipeline, name, depName = kube.Sanitize(pipeline, name)
@@ -362,14 +357,9 @@ func (kube *Kubernetes) CreateStatefulSet(pipeline string, name string, instance
 		},
 	}
 
-	// Send an update if this already exists
+	// If the stateful set exists, delete and recreate it.
 	if kube.StatefulSetExists(stateName) {
-		result, err := client.Update(context.TODO(), statefuleset, metav1.UpdateOptions{})
-		if err != nil {
-			log.Panic(err)
-		}
-		log.Info("Created StatefulSet ", result.GetObjectMeta().GetName())
-		return
+		kube.DeleteStatefulSet(name)
 	}
 
 	// otherwise create
@@ -464,4 +454,10 @@ func (kube *Kubernetes) CreateDaemonSet(pipeline string, name string, instances 
 		panic(err)
 	}
 	fmt.Printf("Created deployment %q.\n", result.GetObjectMeta().GetName())
+}
+
+func (kube *Kubernetes) Sanitize(pipeline string, name string) (string, string, string) {
+	pipeline = strings.Trim(kube.NameExp.ReplaceAllString(pipeline, "-"), "-")
+	name = strings.Trim(kube.NameExp.ReplaceAllString(name, "-"), "-")
+	return pipeline, name, strings.ToLower(fmt.Sprintf("%s-%s", pipeline, name))
 }
