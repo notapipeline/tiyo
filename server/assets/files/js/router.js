@@ -1,4 +1,4 @@
-router = new Navigo();
+router = new Navigo('/');
 var pages = ["dashboard", "buckets", "scan", "pipeline"];
 
 pages.forEach(function _(v, i, a) {

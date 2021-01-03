@@ -25,6 +25,7 @@ type Flow struct {
 	Docker         *Docker
 	Kubernetes     *Kubernetes
 	Flags          *flag.FlagSet
+	Queue          *Queue
 }
 
 func NewFlow() *Flow {
@@ -53,33 +54,26 @@ func (flow *Flow) Init() {
  */
 func (flow *Flow) Create(instance *pipeline.Command) error {
 	log.Info("flow - Creating new container instance for ", instance.Name, " ", instance.Id)
-	var containerName string = instance.Name
-	if !instance.Custom {
-		if !strings.Contains(instance.Name, "/") {
-			containerName = fmt.Sprintf("%s/%s", flow.Config.Docker.Upstream, instance.Name)
-		}
-	}
-
 	var err error
 	var containerExists bool = false
-	containerExists, err = flow.Docker.ContainerExists(instance.Image)
+	containerExists, err = flow.Docker.ContainerExists(instance.Tag)
 	if err != nil {
 		return err
 	}
 
 	if containerExists && !flow.Update {
-		log.Info("Not building image for ", instance.Name, ":", instance.Version, " Image exists")
+		log.Info("Not building image for ", instance.Image, " Image exists")
 		return nil
 	}
 
-	path := fmt.Sprintf("containers/%s", containerName)
+	path := fmt.Sprintf("containers/%s", instance.Tag)
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		// Create container build directory and CD to it
 		owd, _ := os.Getwd()
 		os.MkdirAll(path, 0775)
 		os.Chdir(path)
 		log.Debug("Changing to build path", path)
-		if err := flow.WriteDockerfile(containerName, instance.Version); err != nil {
+		if err := flow.WriteDockerfile(instance.Image); err != nil {
 			return flow.Cleanup(path, owd, err)
 		}
 
@@ -107,10 +101,10 @@ func (flow *Flow) Cleanup(path string, owd string, err error) error {
 	return err
 }
 
-func (flow *Flow) WriteDockerfile(containerName string, containerVersion string) error {
-	log.Debug("Creating Dockerfile", containerName, containerVersion)
+func (flow *Flow) WriteDockerfile(containerName string) error {
+	log.Debug("Creating Dockerfile ", containerName)
 	var name string = "Dockerfile"
-	template := fmt.Sprintf(dockerTemplate, containerName, containerVersion)
+	template := fmt.Sprintf(dockerTemplate, containerName)
 	file, err := os.Create(name)
 	if err != nil {
 		return fmt.Errorf("Failed to create Dockerfile for %s. %s", containerName, err)
@@ -120,7 +114,7 @@ func (flow *Flow) WriteDockerfile(containerName string, containerVersion string)
 		return fmt.Errorf("Failed to write Dockerfile for %s. Error was: %s", name, err)
 	}
 	file.Sync()
-	log.Debug("Dockerfile written:", containerName, containerVersion)
+	log.Debug("Dockerfile written: ", containerName)
 	return nil
 }
 
@@ -200,6 +194,8 @@ func (flow *Flow) Run() int {
 		return 1
 	}
 
+	flow.Queue = NewQueue(flow.Config, flow.PipelineBucket)
+
 	flow.Docker = NewDockerEngine(flow.Config)
 	if err != nil {
 		log.Error(err)
@@ -207,8 +203,7 @@ func (flow *Flow) Run() int {
 	}
 
 	// This should be "Pipeline.Commands" - GetStart is only for minimal-set testing
-	start := flow.Pipeline.GetStart()
-	for _, command := range start {
+	for _, command := range flow.Pipeline.Commands {
 		log.Debug("Pipeline start item", command)
 		err := flow.Create(command)
 		if err != nil {
@@ -216,10 +211,22 @@ func (flow *Flow) Run() int {
 		}
 	}
 
-	flow.Kubernetes = NewKubernetes(flow.Config, flow.Pipeline)
-	flow.Kubernetes.CreateNamespace()
-	flow.Kubernetes.CreateStatefulSet(flow.Pipeline.Name, "tiyo", start)
-	//flow.Kubernetes.CreateDaemonSet(flow.Pipeline.Name, "tiyo", start)
+	flow.Kubernetes, err = NewKubernetes(flow.Config, flow.Pipeline)
+	if err != nil {
+		log.Error(err)
+		return 1
+	}
+
+	for _, item := range flow.Pipeline.Containers {
+		switch item.SetType {
+		case "statefulset":
+			flow.Kubernetes.CreateStatefulSet(flow.Pipeline.Name, item)
+		case "deployment":
+			flow.Kubernetes.CreateDeployment(flow.Pipeline.Name, item)
+		case "daemonset":
+			flow.Kubernetes.CreateDaemonSet(flow.Pipeline.Name, item)
+		}
+	}
 
 	log.Info("Flow complete")
 	return 0

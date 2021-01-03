@@ -83,6 +83,9 @@
                 </li>
             </ul>
             </div>
+            <div class="uk-flex uk-flex-middle uk-margin-bottom">
+            <ul uk-sortable="handle: .kubernetes-element" class="uk-grid-stack uk-height-max-large" id="kubernetes-element-list"></ul>
+            </div>
         </aside>
         <article id="content" class="uk-container-center uk-margin-large-bottom" data-uk-height-viewport="expand: true">
 
@@ -206,6 +209,14 @@
 {{#list}}
 <li class="uk-card uk-card-default uk-card-body pipeline-element">
     <image src="/static/img/languages/{{.}}.svg" alt="{{.}}" uk-tooltip="{{.}}" />
+</li>
+{{/list}}
+</script>
+
+<script id="kubernetestpl" type="x-tmpl-mustache">
+{{#list}}
+<li class="uk-card uk-card-default uk-card-body kubernetes-element">
+    <image src="/static/img/kubernetes/{{.}}.svg" alt="{{.}}" uk-tooltip="{{.}}" />
 </li>
 {{/list}}
 </script>

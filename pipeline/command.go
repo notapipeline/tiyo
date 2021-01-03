@@ -13,6 +13,7 @@ import (
 
 type Command struct {
 	Id            string
+	Parent        string
 	Name          string
 	Command       string
 	Args          string
@@ -24,7 +25,8 @@ type Command struct {
 	Scale         int
 	Timeout       int
 	UseExisting   bool
-	Image         string // Set outside of Command
+	Image         string
+	Tag           string
 
 	Stdout    bytes.Buffer
 	Stderr    bytes.Buffer
@@ -54,6 +56,10 @@ func NewCommand(cell map[string]interface{}) *Command {
 		command.Id = cell["id"].(string)
 	}
 
+	if cell["parent"] != nil {
+		command.Parent = cell["parent"].(string)
+	}
+
 	if cell["name"] != nil {
 		command.Name = cell["name"].(string)
 	}
@@ -78,9 +84,6 @@ func NewCommand(cell map[string]interface{}) *Command {
 		command.Script = cell["script"].(bool)
 	}
 
-	if cell["scale"] != nil {
-		command.Scale = int(cell["scale"].(float64))
-	}
 	if cell["timeout"] != nil {
 		command.Timeout = int(cell["timeout"].(float64)) * 60
 	}
@@ -103,6 +106,32 @@ func NewCommand(cell map[string]interface{}) *Command {
 	}
 
 	return &command
+}
+
+func (command *Command) GetContainer(asTag bool) string {
+	container := command.Language
+	switch command.Language {
+	case "r":
+		container = "r-base"
+	case "javascript":
+		container = "node"
+	case "jupyter":
+		container = "jupyter/datascience-notebook"
+		if asTag {
+			container = "datascience-notebook"
+		}
+	}
+
+	if !command.Custom {
+		if asTag {
+			return command.Name + "-tiyo:" + command.Version
+		}
+		return command.Name + ":" + command.Version
+	}
+	if asTag {
+		return container + "-tiyo:" + command.Version
+	}
+	return container + ":" + command.Version
 }
 
 func (command *Command) GenerateRandomString() string {

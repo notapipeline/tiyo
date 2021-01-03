@@ -1,7 +1,7 @@
 package flow
 
 // Arguments: [org/]container, version, pipeline
-const dockerTemplate string = `FROM %s:%s
+const dockerTemplate string = `FROM %s
 USER root
 RUN mkdir /tiyo
 WORKDIR /tiyo

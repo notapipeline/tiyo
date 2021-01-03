@@ -205,10 +205,35 @@ links['file'] = new joint.dia.Link({
         '</form>'+
         '</div>'
     );
+    
+    this.$containerProperties = $(
+        '<div class="containerProperties">'+
+        '<h4></h4>'+
+        '<form>'+
+        '  <table>'+
+        '    <tr>'+
+        '      <td><label for="containername">name</label></td>'+
+        '      <td><input id="containername" value="" /></td>'+
+        '    </tr>'+
+        '    <tr>'+
+        '      <td><label for="containerscale">Scale</label></td>'+
+        '      <td><input id="containerscale" value=""></td>'+
+        '    </tr>'+
+        '  </table>'+
+        '  <div style="float: right;">'+
+        '    <a class="uk-button-small cancel">cancel</a>'+
+        '    <a class="uk-button-small uk-button-primary done">done</a>'+
+        '  </div>'+
+        '</form>'+
+        '</div>'
+    );
+    
+    
 
     $('#paper-pipeline').append(this.$tcpProperties);
     $('#paper-pipeline').append(this.$socketProperties);
     $('#paper-pipeline').append(this.$appProperties);
+    $('#paper-pipeline').append(this.$containerProperties);
 
     /**
      * Base model for droppable items
@@ -227,7 +252,6 @@ links['file'] = new joint.dia.Link({
             script: false,
             scriptcontent: "",
             custom: false,
-            scale: 0,
             timeout: 15,
             existing: false,
 
@@ -279,18 +303,22 @@ links['file'] = new joint.dia.Link({
         }, joint.shapes.devs.Model.prototype.defaults)
     });
 
-    /**
-     * Helper function for waiting until the language list is ready
-     */
-    function waitForLanguages(callback) {
-        if(Object.keys(languages).length > 0) {
-            callback();
-            return;
-        }
-        else{
-            setTimeout(waitForLanguages, 250, callback);
-        }
-    }
+    // Sets (daemon-set, stateful-set, deployment, etc)
+    joint.shapes.container.Container = joint.shapes.basic.Generic.extend({
+        markup: '<g class="rotatable"><g class="scalable"><rect/></g><image/><text/></g>',
+        defaults: joint.util.deepSupplement({
+            type: 'container.Container',
+            name: "",
+            scale: 0,
+            settype: "",
+            size: { width: 250, height: 250 },
+            attrs: {
+                rect: { fill: '#fff', 'fill-opacity': '0', stroke: 'black', width: 100, height: 60 },
+                text: { 'font-size': 14, text: '', 'ref-x': .5, 'ref-y': -15, ref: 'rect', 'y-alignment': 'top', 'x-alignment': 'middle', fill: 'black' },
+                image: { 'ref-x': -15, 'ref-y': -15, ref: 'rect', width: 40, height: 40 },
+            }
+        }, joint.shapes.basic.Generic.prototype.defaults)
+    });
 
     /**
      * For each SVG in assets/files/img/languages create a container object for
@@ -301,12 +329,32 @@ links['file'] = new joint.dia.Link({
             $.get('/static/img/languages/' + lang + '.svg', function(data) {
                 languages[lang] = new joint.shapes.container.Element({
                     script: true,
+                    custom: true,
                     lang: lang,
                     attrs: {
                         '.body': {
                             'xlink:href': 'data:image/svg+xml;utf8,' + encodeURIComponent(new XMLSerializer().serializeToString(data.documentElement))
                         },
-                    }
+                    },
+                });
+            });
+        }
+    });
+
+    /**
+     * For each SVG in assets/files/img/languages create a container object for
+     * drag-drop from the sidebar to the main panel
+     */
+    waitForKubernetes(function() {
+        for(const kube in kubernetes) {
+            $.get('/static/img/kubernetes/' + kube+ '.svg', function(data) {
+                kubernetes[kube] = new joint.shapes.container.Container({
+                    scale: 0,
+                    attrs: {
+                        '.body': {
+                            'xlink:href': 'data:image/svg+xml;utf8,' + encodeURIComponent(new XMLSerializer().serializeToString(data.documentElement))
+                        },
+                    },
                 });
             });
         }
@@ -319,6 +367,7 @@ links['file'] = new joint.dia.Link({
     var attached = false;
     var dragging = false;
     var dragStartPosition = null;
+    var mousedown = false;
 
     paper.on('blank:mousewheel', (event, x, y, delta) => {
         const scale = paper.scale();
@@ -336,6 +385,7 @@ links['file'] = new joint.dia.Link({
     
     paper.on('blank:pointerup', function(cellView, x, y) {
         dragging = false;
+        console.log(x, y);
     });
 
     $('#paper-pipeline').mousemove(function(event) {
@@ -375,7 +425,7 @@ links['file'] = new joint.dia.Link({
     paper.on('element:mouseout', function(view, evt) {
     */
     paper.on('element:mouseleave', function(view, evt) {
-        view.removeTools();
+        setTimeout(function(v) { v.removeTools() }, 500, view);
         attach = false;
         if (!activeLink || !attached) { return; }
         linkView = activeLink.findView(this);
@@ -426,17 +476,64 @@ links['file'] = new joint.dia.Link({
     });
 
     paper.on('element:mouseenter', (elementView) => {
-        elementView.addTools(
-            new joint.dia.ToolsView({
-                tools: [
-                    new joint.elementTools.Remove({
-                    useModelGeometry: true,
-                    y: '0%',
-                    x: '100%',
-                    }),
-                ],
-            })
-        );
+        if (elementView.model.attributes.type == 'container.Element') {
+            elementView.addTools(
+                new joint.dia.ToolsView({
+                    tools: [
+                        new joint.elementTools.Remove({
+                            useModelGeometry: true, y: '0%', x: '100%',
+                        }),
+                    ],
+                })
+            );
+        } else {
+            elementView.addTools(
+                new joint.dia.ToolsView({
+                    tools: [
+                        new joint.elementTools.Remove({
+                            useModelGeometry: true, y: '0%', x: '100%',
+                        }),
+                        new joint.elementTools.Button({
+                            useModelGeometry: true, y: '100%', x: '100%',
+                            markup: [{
+                                tagName: 'circle',
+                                attributes: {
+                                    r: 7,
+                                    fill: '#000',
+                                    'cursor': 'pointer',
+                                }
+                            }],
+                            action: function(evt) {
+                                $(document).on({
+                                    'mousemove.container': onDrag,
+                                    'mouseup.container': onDragEnd
+                                }, {
+                                    view: elementView
+                                });
+
+                                function onDrag(evt) {
+                                    // transform client to paper coordinates
+                                    var p = paper.snapToGrid({
+                                        x: evt.clientX,
+                                        y: evt.clientY
+                                    });
+                                    var attributes = evt.data.view.model.attributes;
+                                    x = (attributes.position.x + p.x);
+                                    y = (attributes.position.y + p.y);
+                                    evt.data.view.model.resize( x, y);
+                                    
+                                }
+
+                                function onDragEnd(evt) {
+                                    $(document).off('mousemove.container');
+                                    $(document).off('mouseup.container');
+                                }
+                            }
+                        }),
+                    ],
+                })
+            );
+        }
     });
     
     paper.on('element:pointerup', function(view, evt) {
@@ -445,12 +542,45 @@ links['file'] = new joint.dia.Link({
             elem.target({id: view.model.id });
         }
     });
+    
+    
+    paper.on('cell:pointerdown', function(cellView, evt, x, y) {
+        var cell = cellView.model;
+        if (!cell.get('embeds') || cell.get('embeds').length === 0) {
+            // Show the dragged element above all the other cells (except when the
+            // element is a parent).
+            cell.toFront();
+            graph.getConnectedLinks(cell).forEach(function(link){link.toFront()});
+        }
+        if (cell.get('parent')) {
+            graph.getCell(cell.get('parent')).unembed(cell);
+        }
+    });
 
+    paper.on('cell:pointerup', function(cellView, evt, x, y) {
+        var cell = cellView.model;
+        var cellViewsBelow = paper.findViewsFromPoint(cell.getBBox().center());
+
+        if (cellViewsBelow.length) {
+            
+            var cellViewBelow = _.find(cellViewsBelow, function(c) { return c.model.id !== cell.id });
+            // Prevent recursive embedding.
+            if (cellViewBelow && cellViewBelow.model.get('parent') !== cell.id) {
+                // only allow embedding to container types but don't allow container nesting (yet)
+                if (cellViewBelow.model.attributes.type == 'container.Container' && cell.attributes.type != 'container.Container') {
+                    cellViewBelow.model.embed(cell);
+                }
+            }
+        }
+    });
+    
     /**
      * Close all property dialogues
      */
     function closeAll() {
-        ['.applicationProperties', '.tcpProperties', '.socketProperties'].forEach(function(el){
+        ['.applicationProperties', '.tcpProperties',
+         '.socketProperties', '.containerProperties',
+        ].forEach(function(el){
             $(el).css({
                 'display': 'none',
             });
@@ -518,6 +648,48 @@ links['file'] = new joint.dia.Link({
      */
     function onElementRightClick(model, evt, x, y) {
         closeAll();
+        if (model.model.attributes.type == 'container.Container') {
+            containerAttributes(model, evt, x, y);
+        } else {
+            appAttributes(model, evt, x, y);
+        }
+    }
+    
+    function containerAttributes(model, evt, x, y) {
+        var element = $('.containerProperties');
+        appelement = model.model;
+        $('#containername').val(appelement.attributes.name);
+        $('#containerscale').val(appelement.attributes.scale);
+        
+        element.css({
+            "position": "absolute",
+            "display": "block",
+            "left": evt.offsetX,
+            "top": evt.offsetY,
+        });
+
+        element.find('.done').click(function(e) {
+            appelement.attributes.name = $('#containername').val();
+            appelement.attributes.scale = parseInt($('#containerscale').val(), 10);
+            appelement.attr()['text'].text = $('#containername').val();
+            
+            element.css({
+                "display": "none",
+            });
+            savePipeline();
+            element.find('.done').off('click');
+            joint.dia.ElementView.prototype.render.apply(model, arguments);
+        });
+        
+        element.find('.cancel').click(function(e) {
+            element.css({
+                "display": "none",
+            });
+            element.find('.cancel').off('click');
+        });
+    }
+    
+    function appAttributes(model, evt, x, y) {
         var element = $('.applicationProperties');
         element.find('h4').text('application properties');
         appelement = model.model;
@@ -564,14 +736,12 @@ links['file'] = new joint.dia.Link({
             appelement.attributes.command = $('#appcmd').val();
             appelement.attributes.arguments = $('#appargs').val();
             appelement.attributes.version = $('#appversion').val();
-            appelement.attributes.scale = parseInt($('#appscale').val(), 10);
             appelement.attributes.timeout = parseInt($('#apptimeout').val(), 10);
             appelement.attributes.script = $('#appscript').prop('checked');
+            joint.dia.ElementView.prototype.render.apply(model, arguments);
             element.css({
                 "display": "none",
             });
-            joint.dia.ElementView.prototype.render.apply(model, arguments);
-
             savePipeline();
             appelement = null;
             $('#appdone').off('click');

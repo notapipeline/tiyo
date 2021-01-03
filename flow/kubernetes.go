@@ -27,7 +27,7 @@ type Kubernetes struct {
 	NameExp    *regexp.Regexp
 }
 
-func NewKubernetes(config *config.Config, pipeline *pipeline.Pipeline) *Kubernetes {
+func NewKubernetes(config *config.Config, pipeline *pipeline.Pipeline) (*Kubernetes, error) {
 	log.Info("Initialising Kubernetes engine")
 	kube := Kubernetes{
 		Pipeline: pipeline,
@@ -40,15 +40,15 @@ func NewKubernetes(config *config.Config, pipeline *pipeline.Pipeline) *Kubernet
 	log.Info("Loading config file from ", config.Kubernetes.ConfigFile)
 	kube.KubeConfig, err = clientcmd.BuildConfigFromFlags("", config.Kubernetes.ConfigFile)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	kube.ClientSet, err = kubernetes.NewForConfig(kube.KubeConfig)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
-	return &kube
+	return &kube, nil
 }
 
 func (kube *Kubernetes) GetPod(name string) *corev1.Pod {
@@ -184,6 +184,7 @@ func (kube *Kubernetes) GetServicePorts(instances []*pipeline.Command) []corev1.
 				if (*link).GetType() == "udp" {
 					port.Protocol = corev1.ProtocolUDP
 				}
+				ports = append(ports, port)
 			}
 		}
 	}
@@ -195,8 +196,8 @@ func (kube *Kubernetes) GetDeploymentContainers(instances []*pipeline.Command) [
 	containers := make([]corev1.Container, 0)
 	for _, instance := range instances {
 		container := corev1.Container{
-			Name:            instance.Name,
-			Image:           instance.Image,
+			Name:            strings.ToLower(strings.Trim(kube.NameExp.ReplaceAllString(instance.Name, "-"), "-")),
+			Image:           instance.Tag,
 			ImagePullPolicy: corev1.PullAlways,
 			Ports:           kube.GetContainerPorts(instance),
 		}
@@ -219,8 +220,8 @@ func (kube *Kubernetes) GetStatefulSetContainers(instances []*pipeline.Command) 
 	containers := make([]corev1.Container, 0)
 	for _, instance := range instances {
 		container := corev1.Container{
-			Name:            instance.Name,
-			Image:           instance.Image,
+			Name:            strings.ToLower(strings.Trim(kube.NameExp.ReplaceAllString(instance.Name, "-"), "-")),
+			Image:           instance.Tag,
 			ImagePullPolicy: corev1.PullAlways,
 			Ports:           kube.GetContainerPorts(instance),
 			VolumeMounts:    kube.GetVolumeMountForNamespace(kube.Config.Kubernetes.Namespace),
@@ -233,13 +234,17 @@ func (kube *Kubernetes) GetStatefulSetContainers(instances []*pipeline.Command) 
 func (kube *Kubernetes) CreateServiceAccount() {}
 
 func (kube *Kubernetes) CreateService(serviceName string, instances []*pipeline.Command) string {
+	ports := kube.GetServicePorts(instances)
+	if len(ports) == 0 {
+		return ""
+	}
 	client := kube.ClientSet.CoreV1().Services(kube.Config.Kubernetes.Namespace)
 	service := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: serviceName,
 		},
 		Spec: corev1.ServiceSpec{
-			Ports: kube.GetServicePorts(instances),
+			Ports: ports,
 		},
 	}
 
@@ -247,7 +252,7 @@ func (kube *Kubernetes) CreateService(serviceName string, instances []*pipeline.
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("Created service %q.\n", result.GetObjectMeta().GetName())
+	log.Info("Created service ", result.GetObjectMeta().GetName())
 	return result.GetObjectMeta().GetName()
 }
 
@@ -276,9 +281,10 @@ func (kube *Kubernetes) DeleteDeployment(name string) {
 	}
 }
 
-func (kube *Kubernetes) CreateDeployment(pipeline string, name string, instances []*pipeline.Command) {
-	var depName string
-	pipeline, name, depName = kube.Sanitize(pipeline, name)
+func (kube *Kubernetes) CreateDeployment(pipeline string, container *pipeline.Container) {
+	var depName, name string
+	pipeline, name, depName = kube.Sanitize(pipeline, container.Name)
+	instances := container.GetChildren()
 
 	client := kube.ClientSet.AppsV1().Deployments(kube.Config.Kubernetes.Namespace)
 
@@ -287,7 +293,7 @@ func (kube *Kubernetes) CreateDeployment(pipeline string, name string, instances
 			Name: depName,
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: kube.GetMaxReplicas(instances),
+			Replicas: &container.Scale,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
 					"app": name,
@@ -309,16 +315,17 @@ func (kube *Kubernetes) CreateDeployment(pipeline string, name string, instances
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("Created deployment %q.\n", result.GetObjectMeta().GetName())
+	log.Info("Created deployment ", result.GetObjectMeta().GetName())
 }
 
-func (kube *Kubernetes) CreateStatefulSet(pipeline string, name string, instances []*pipeline.Command) {
-	var stateName string
-	pipeline, name, stateName = kube.Sanitize(pipeline, name)
+func (kube *Kubernetes) CreateStatefulSet(pipeline string, container *pipeline.Container) {
+	var stateName, name string
+	pipeline, name, stateName = kube.Sanitize(pipeline, container.Name)
 	client := kube.ClientSet.AppsV1().StatefulSets(kube.Config.Kubernetes.Namespace)
+	instances := container.GetChildren()
 
-	log.Info("Creating statefule set ", pipeline, " ", name)
-	statefuleset := &appsv1.StatefulSet{
+	log.Info("Creating stateful set ", stateName)
+	statefulset := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      stateName,
 			Namespace: kube.Config.Kubernetes.Namespace,
@@ -327,7 +334,7 @@ func (kube *Kubernetes) CreateStatefulSet(pipeline string, name string, instance
 			},
 		},
 		Spec: appsv1.StatefulSetSpec{
-			Replicas: kube.GetMaxReplicas(instances),
+			Replicas: &container.Scale,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
 					"app": name,
@@ -359,18 +366,20 @@ func (kube *Kubernetes) CreateStatefulSet(pipeline string, name string, instance
 
 	// If the stateful set exists, delete and recreate it.
 	if kube.StatefulSetExists(stateName) {
-		kube.DeleteStatefulSet(name)
+		kube.DeleteStatefulSet(stateName)
 	}
 
 	// otherwise create
-	result, err := client.Create(context.TODO(), statefuleset, metav1.CreateOptions{})
+	result, err := client.Create(context.TODO(), statefulset, metav1.CreateOptions{})
 	if err != nil {
 		log.Panic(err)
 	}
-	log.Info("Created StatefulSet ", result.GetObjectMeta().GetName())
+	log.Debug(result)
+	log.Info("Created stateful set ", result.GetObjectMeta().GetName())
 }
 
 func (kube *Kubernetes) DeleteStatefulSet(name string) {
+	log.Info("Deleting stateful set ", name)
 	client := kube.ClientSet.AppsV1().StatefulSets(kube.Config.Kubernetes.Namespace)
 	policy := metav1.DeletePropagationForeground
 	client.Delete(context.TODO(), name, metav1.DeleteOptions{
@@ -379,9 +388,11 @@ func (kube *Kubernetes) DeleteStatefulSet(name string) {
 
 	for {
 		if !kube.StatefulSetExists(name) {
+			fmt.Printf("\n")
 			log.Info("Deleted statefulset ", name)
 			break
 		}
+		fmt.Printf(".")
 		time.Sleep(1 * time.Second)
 	}
 }
@@ -402,9 +413,9 @@ func (kube *Kubernetes) DeleteDaemonSet(name string) {
 	}
 }
 
-func (kube *Kubernetes) CreateDaemonSet(pipeline string, name string, instances []*pipeline.Command) {
-	var daemonName string
-	pipeline, name, daemonName = kube.Sanitize(pipeline, name)
+func (kube *Kubernetes) CreateDaemonSet(pipeline string, container *pipeline.Container) {
+	var daemonName, name string
+	pipeline, name, daemonName = kube.Sanitize(pipeline, container.Name)
 	client := kube.ClientSet.AppsV1().DaemonSets(kube.Config.Kubernetes.Namespace)
 
 	daemonset := &appsv1.DaemonSet{
@@ -434,7 +445,7 @@ func (kube *Kubernetes) CreateDaemonSet(pipeline string, name string, instances 
 							Effect: "NoSchedule",
 						},
 					},
-					Containers: kube.GetStatefulSetContainers(instances),
+					Containers: kube.GetStatefulSetContainers(container.GetChildren()),
 					Volumes: []corev1.Volume{
 						{
 							Name: kube.Config.Kubernetes.Volume,
@@ -453,7 +464,7 @@ func (kube *Kubernetes) CreateDaemonSet(pipeline string, name string, instances 
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("Created deployment %q.\n", result.GetObjectMeta().GetName())
+	log.Info("Created daemon set ", result.GetObjectMeta().GetName())
 }
 
 func (kube *Kubernetes) Sanitize(pipeline string, name string) (string, string, string) {

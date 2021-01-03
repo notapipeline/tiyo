@@ -14,10 +14,11 @@ import (
 )
 
 type Pipeline struct {
-	Name     string
-	Commands map[string]*Command
-	Links    map[string]*LinkInterface
-	Config   *config.Config
+	Name       string
+	Containers map[string]*Container
+	Commands   map[string]*Command
+	Links      map[string]*LinkInterface
+	Config     *config.Config
 }
 
 func (pipeline *Pipeline) GetCommand(id string) *Command {
@@ -180,6 +181,8 @@ func (pipeline *Pipeline) GetConnection(source *Command, dest *Command) *LinkInt
 // If path is empty, takes the name of the upstream command
 func (pipeline *Pipeline) WatchItems() []string {
 	watch := make([]string, 0)
+	watch = append(watch, "") // watch pipeline dir
+
 	for _, link := range pipeline.Links {
 		if (*link).GetLink().Type == "file" && (*link).(*PathLink).Watch {
 			path := (*link).(*PathLink).Path
@@ -201,6 +204,7 @@ func GetPipeline(config *config.Config, name string) (*Pipeline, error) {
 	pipeline.Name = name
 	pipeline.Commands = make(map[string]*Command)
 	pipeline.Links = make(map[string]*LinkInterface)
+	pipeline.Containers = make(map[string]*Container)
 	pipeline.Config = config
 
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: config.UseInsecureTLS}
@@ -244,8 +248,19 @@ func GetPipeline(config *config.Config, name string) (*Pipeline, error) {
 		switch cell["type"].(string) {
 		case "container.Element":
 			command := NewCommand(cell)
-			command.Image = pipeline.GetImageTagName(command)
+			if !command.Custom {
+				command.Image = pipeline.Config.Docker.Upstream + "/" + command.GetContainer(false)
+			} else {
+				command.Image = command.GetContainer(false)
+			}
+			command.Tag = pipeline.Config.Docker.Primary + "/" + command.GetContainer(true)
+			if pipeline.Config.Docker.Registry != "" {
+				command.Tag = pipeline.Config.Docker.Registry + "/" + command.Tag
+			}
 			pipeline.Commands[command.Id] = command
+		case "container.Container":
+			container := NewContainer(&pipeline, cell)
+			pipeline.Containers[container.Id] = container
 		case "link":
 			link := NewLink(cell)
 			switch link.(type) {
@@ -257,27 +272,4 @@ func GetPipeline(config *config.Config, name string) (*Pipeline, error) {
 		}
 	}
 	return &pipeline, nil
-}
-
-func (pipeline *Pipeline) GetImageTagName(command *Command) string {
-	// A bit messy but gets 'image' from 'owner/image:version'
-	var name string
-	if command.Name != "" {
-		nameSlice := strings.Split(command.Name, "/")
-		name = nameSlice[len(nameSlice)-1]
-		nameSlice = strings.Split(name, ":")
-		name = nameSlice[0]
-	} else {
-		name = command.Language
-	}
-
-	image := fmt.Sprintf("%s-tiyo:%s", name, command.Version)
-	var tag string = image
-	if pipeline.Config.Docker.Primary != "" {
-		tag = fmt.Sprintf("%s/%s", pipeline.Config.Docker.Primary, image)
-	}
-	if pipeline.Config.Docker.Registry != "" {
-		tag = fmt.Sprintf("%s/%s", pipeline.Config.Docker.Registry, tag)
-	}
-	return tag
 }

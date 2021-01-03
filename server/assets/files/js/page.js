@@ -7,8 +7,9 @@ var pipelineAutoSave = null;
 var dragEvent = null;
 
 // diagram elements
-var languages = []
-var links = []
+var languages = [];
+var kubernetes = [];
+var links = [];
 var activeLink = null;
 var activeDragEvent = null;
 
@@ -17,15 +18,58 @@ var activeDragEvent = null;
  * Basically returns the SVG list from assets/files/img/languages
  */
 $.get('/api/v1/languages', function (data) {
-    var langs = data.message
+    var langs = data.message;
     langs.sort(function (a, b) {
         return a.toLowerCase().localeCompare(b.toLowerCase());
     });
     langs.forEach(function(img) {
-        language = img.split('.')[0]
+        language = img.split('.')[0];
         languages[language] = null;
     });
 });
+
+/**
+ * Helper function for waiting until the language list is ready
+ */
+function waitForLanguages(callback) {
+    if(Object.keys(languages).length > 0) {
+        callback();
+        return;
+    }
+    else{
+        setTimeout(waitForLanguages, 250, callback);
+    }
+}
+
+
+/**
+ * Gets a list of available 'kubernetes-containers' from the server.
+ * Basically returns the SVG list from assets/files/img/kubernetes
+ */
+$.get('/api/v1/kubernetes', function (data) {
+    var kubes = data.message;
+    kubes.sort(function (a, b) {
+        return a.toLowerCase().localeCompare(b.toLowerCase());
+    });
+    kubes.forEach(function(img) {
+        kube = img.split('.')[0];
+        kubernetes[kube] = null;
+    });
+});
+
+    
+/**
+ * Helper function for waiting until the kubernetes container list is ready
+ */
+function waitForKubernetes(callback) {
+    if(Object.keys(kubernetes).length > 0) {
+        callback();
+        return;
+    }
+    else{
+        setTimeout(waitForKubernetes, 250, callback);
+    }
+}
 
 /**
  * Inline editing of certain headings/table cells
@@ -201,6 +245,39 @@ UIkit.util.on('#pipeline-link-list', 'stop', (e) => {
     elem = null;
 });
 
+
+UIkit.util.on('#kubernetes-element-list', 'start', (e) => {
+    elem = e.detail[1];
+    document.getElementById('paper-pipeline-holder').addEventListener('pointermove', onDragging);
+});
+
+
+UIkit.util.on('#kubernetes-element-list', 'stop', (e) => {
+    if (!target) {
+        return;
+    }
+    document.getElementById('paper-pipeline-holder').removeEventListener('pointermove', onDragging);
+    if ($(target)[0].nodeName == "svg" && $(target)[0].parentElement.id == "paper-pipeline") {
+        var point = getTransformPoint();
+        var name = $(elem).find('img').attr('src').replace(/.*\//, '').split('.')[0];
+        var container = kubernetes[
+            $(elem).find('img').attr('src').replace(/.*\//, '').split('.')[0]
+        ].clone().position(point.x, point.y).attr({
+            text: {
+                text: name,
+            },
+            image: {
+                'xlink:href': $(elem).find('img').attr('src'),
+            },
+        });
+        container.attributes.name = name;
+        container.attributes.settype = name;
+        container.addTo(graph);
+    }
+    target = null;
+    elem = null;
+});
+
 /*
  * -----------------------------------------------------------------------------------------------
  * End of toolbar applications
@@ -238,7 +315,7 @@ function savePipeline() {
         pipelineAutoSave = null;
     }
 
-    if (router._lastRouteResolved.url != "/pipeline") {
+    if (router.lastResolved()[0].url != "pipeline") {
         return;
     }
     var title = $('.editable.pipelinetitle').text();
@@ -257,8 +334,8 @@ function savePipeline() {
  * Load the pipeline from KV store
  */
 function loadPipeline() {
-    console.log('Valid for pipeline?', router._lastRouteResolved.url);
-    if (router._lastRouteResolved.url != "/pipeline") {
+    console.log('Valid for pipeline?', router.lastResolved()[0].url);
+    if (router.lastResolved()[0].url != "pipeline") {
         return;
     }
     var pipelineValue = Cookies.get('pipeline');
@@ -281,8 +358,9 @@ function loadPipeline() {
 function loadMenu() {
     $('.file').find('li > a').bind("click", function() {
         var text = $(this).text().toLowerCase().trim();
-        switch (router._lastRouteResolved.url) {
-            case "/pipeline":
+        console.log(router.lastResolved()[0].url, text)
+        switch (router.lastResolved()[0].url) {
+            case "pipeline":
                 switch (text) {
                     case "new":
                         Cookies.remove('pipeline');
@@ -293,7 +371,7 @@ function loadMenu() {
                         break;
                 }
                 break;
-            case "/buckets":
+            case "buckets":
                 switch (text) {
                     case "new":
                         Cookies.remove('bucket');
@@ -303,7 +381,7 @@ function loadMenu() {
                         break;
                 }
                 break;
-            case "/scan":
+            case "scan":
                 switch (text) {
                     case "new":
                         UIkit.modal('#create-bucket').show();
@@ -325,6 +403,18 @@ function loadLanguages()
     var template = Handlebars.compile(source);
     var html = template({id: "languagestpl", list: Object.keys(languages)});
     $('#pipeline-element-list').html(html);
+}
+
+
+/**
+ * Convert the list of kubernetes containers into droppable items
+ */
+function loadKubernetes()
+{
+    var source = $('#kubernetestpl').html();
+    var template = Handlebars.compile(source);
+    var html = template({id: "kubernetestpl", list: Object.keys(kubernetes)});
+    $('#kubernetes-element-list').html(html);
 }
 
 /**
@@ -354,7 +444,8 @@ function openPipeline(pipelineName)
 
 $(document).ready(function() {
     router.resolve();
-    loadLanguages();
+    waitForLanguages(loadLanguages);
+    waitForKubernetes(loadKubernetes);
     loadBucketTable();
     editableElements();
     loadMenu();

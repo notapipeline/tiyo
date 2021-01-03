@@ -66,6 +66,9 @@ func (docker *Docker) ContainerExists(tag string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	if response.StatusCode != 200 {
+		return false, nil
+	}
 
 	defer response.Body.Close()
 	tags := make([]struct {
@@ -115,6 +118,9 @@ func (docker *Docker) Build(tag string) error {
 		if err != nil {
 			return err
 		}
+		if file == "Dockerfile" {
+			log.Debug(string(contents))
+		}
 
 		header := &tar.Header{
 			Name: file,
@@ -154,11 +160,7 @@ func (docker *Docker) Build(tag string) error {
 }
 
 func (docker *Docker) Create(command *pipeline.Command) error {
-	// Tag the new image
-	/*if err := docker.Client.ImageTag(context.Background(), image, tag); err != nil {
-		return err
-	}*/
-	if err := docker.Build(command.Image); err != nil {
+	if err := docker.Build(command.Tag); err != nil {
 		return err
 	}
 
@@ -172,7 +174,7 @@ func (docker *Docker) Create(command *pipeline.Command) error {
 		return err
 	}
 	encoded := base64.URLEncoding.EncodeToString(object)
-	response, err := docker.Client.ImagePush(context.Background(), command.Image, types.ImagePushOptions{
+	response, err := docker.Client.ImagePush(context.Background(), command.Tag, types.ImagePushOptions{
 		RegistryAuth: encoded,
 	})
 	if err != nil {

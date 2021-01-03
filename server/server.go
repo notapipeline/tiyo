@@ -14,10 +14,10 @@ import (
 	"os"
 	"path"
 
+	"github.com/choclab-net/tiyo/config"
 	"github.com/gin-contrib/multitemplate"
 	"github.com/gin-contrib/static"
 	"github.com/gin-gonic/gin"
-	"github.com/choclab-net/tiyo/config"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -36,6 +36,15 @@ type Server struct {
 
 func NewServer() *Server {
 	server := Server{}
+	mode := os.Getenv("TIYO_LOG")
+	if mode == "" {
+		mode = "production"
+	}
+	log.Info("Running in ", mode, " mode")
+	if mode != "debug" && mode != "trace" {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
 	server.Engine = gin.Default()
 	server.Config, _ = config.NewConfig()
 	server.Init()
@@ -81,7 +90,6 @@ func (server *Server) Run() int {
 		return 1
 	}
 	bfs := GetBFS("server/assets/files")
-	fmt.Printf("%+v\n", bfs)
 	server.Engine.Use(static.Serve("/static", bfs))
 
 	render := multitemplate.New()
@@ -115,6 +123,7 @@ func (server *Server) Run() int {
 
 	server.Engine.GET("/api/v1/containers", server.Api.Containers)
 	server.Engine.GET("/api/v1/languages", bfs.Languages)
+	server.Engine.GET("/api/v1/kubernetes", bfs.Kubernetes)
 
 	server.Engine.GET("/api/v1/scan/:bucket", server.Api.PrefixScan)
 	server.Engine.GET("/api/v1/scan/:bucket/:child", server.Api.PrefixScan)
@@ -130,7 +139,7 @@ func (server *Server) Run() int {
 	}
 
 	if err != nil {
-		fmt.Printf("Error: Cannot run server. %+v", err)
+		log.Error("Cannot run server. ", err)
 		return 1
 	}
 	return 0

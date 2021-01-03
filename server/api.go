@@ -11,6 +11,7 @@ import (
 
 	"github.com/boltdb/bolt"
 	"github.com/gin-gonic/gin"
+	log "github.com/sirupsen/logrus"
 )
 
 var containers []string
@@ -280,6 +281,7 @@ func (api *Api) Put(c *gin.Context) {
 			b = b.Bucket([]byte(child))
 		}
 
+		log.Debug(request, b)
 		err = b.Put([]byte(request["key"]), []byte(request["value"]))
 		if err != nil {
 			return fmt.Errorf("create kv: %s", err)
@@ -417,7 +419,7 @@ func (api *Api) PrefixScan(c *gin.Context) {
 		}
 		return nil
 	}); err != nil {
-		fmt.Printf("ERROR: %+v\n", err)
+		log.Error(err)
 		result.Code = 400
 		result.Result = "Error"
 		result.Message = err.Error()
