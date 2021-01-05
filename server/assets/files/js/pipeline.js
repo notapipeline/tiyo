@@ -184,10 +184,6 @@ links['file'] = new joint.dia.Link({
         '      <td><input id="appversion" value=""></td>'+
         '    </tr>'+
         '    <tr>'+
-        '      <td><label for="appscale">Scale</label></td>'+
-        '      <td><input id="appscale" value=""></td>'+
-        '    </tr>'+
-        '    <tr>'+
         '      <td><label for="apptimeout">Timeout</label></td>'+
         '      <td><input id="apptimeout" value=""></td>'+
         '    </tr>'+
@@ -704,7 +700,6 @@ links['file'] = new joint.dia.Link({
             appelement.attributes.command = appelement.attr()['.label'].text
         }
 
-        $('#appscale').val(appelement.attributes.scale);
         $('#appcmd').val(appelement.attributes.command);
         $('#appargs').val(appelement.attributes.arguments);
         $('#appversion').val(appelement.attributes.version);

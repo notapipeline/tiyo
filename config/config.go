@@ -9,13 +9,15 @@ import (
 	"io/ioutil"
 	"os"
 	"strings"
+
+	log "github.com/sirupsen/logrus"
 )
 
 type Host struct {
 	Host   string `json:"host"`
 	Port   int    `json:"port"`
-	Cacert string `json:"cacert"`
-	Cakey  string `json:"cakey"`
+	Cacert string `json:"cacert,omitempty"`
+	Cakey  string `json:"cakey,omitempty"`
 }
 
 type Kubernetes struct {
@@ -41,6 +43,7 @@ type Config struct {
 	Flow            Host       `json:"flow"`
 	Kubernetes      Kubernetes `json:"kubernetes"`
 	Docker          Docker     `json:"docker"`
+	AppName         string     `json:"appname"`
 }
 
 func NewConfig() (*Config, error) {
@@ -77,6 +80,16 @@ func (config *Config) AssembleServer() string {
 		protocol = "https"
 	}
 	return fmt.Sprintf("%s://%s:%d", protocol, config.Assemble.Host, config.Assemble.Port)
+}
+
+func (config *Config) FlowServer() string {
+	var protocol string = "http"
+	if config.Flow.Cacert != "" && config.Flow.Cakey != "" {
+		protocol = "https"
+	}
+	host := fmt.Sprintf("%s://%s:%d", protocol, config.Flow.Host, config.Flow.Port)
+	log.Debug(host)
+	return host
 }
 
 func (config *Config) SequenceDir() string {

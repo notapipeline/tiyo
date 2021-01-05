@@ -15,6 +15,7 @@ import (
 
 type Pipeline struct {
 	Name       string
+	BucketName string
 	Containers map[string]*Container
 	Commands   map[string]*Command
 	Links      map[string]*LinkInterface
@@ -175,15 +176,13 @@ func (pipeline *Pipeline) GetConnection(source *Command, dest *Command) *LinkInt
 	return nil
 }
 
-// Gets a list of directories/files to watch for events
-// does not create
-//
-// If path is empty, takes the name of the upstream command
-func (pipeline *Pipeline) WatchItems() []string {
-	watch := make([]string, 0)
-	watch = append(watch, "") // watch pipeline dir
+func (pipeline *Pipeline) linkSources(links []*LinkInterface) []string {
+	sources := make([]string, 0)
+	if len(links) == 0 {
+		sources = append(sources, "root")
+	}
 
-	for _, link := range pipeline.Links {
+	for _, link := range links {
 		if (*link).GetLink().Type == "file" && (*link).(*PathLink).Watch {
 			path := (*link).(*PathLink).Path
 			if path == "" {
@@ -192,16 +191,38 @@ func (pipeline *Pipeline) WatchItems() []string {
 			}
 			// if path is still empty, ignore
 			if path != "" {
-				watch = append(watch, path)
+				sources = append(sources, path)
 			}
 		}
 	}
+	return sources
+}
+
+func (pipeline *Pipeline) GetPathSources(source *Command) []string {
+	links := pipeline.GetLinksTo(source)
+	return pipeline.linkSources(links)
+}
+
+// Gets a list of directories/files to watch for events
+// does not create
+//
+// If path is empty, takes the name of the upstream command
+func (pipeline *Pipeline) WatchItems() []string {
+	watch := make([]string, 0)
+	watch = append(watch, "") // watch pipeline dir
+	links := make([]*LinkInterface, 0)
+	for _, link := range pipeline.Links {
+		links = append(links, link)
+	}
+	sources := pipeline.linkSources(links)
+	watch = append(watch, sources...)
 	return watch
 }
 
 func GetPipeline(config *config.Config, name string) (*Pipeline, error) {
 	pipeline := Pipeline{}
 	pipeline.Name = name
+	pipeline.BucketName = strings.ToLower(strings.ReplaceAll(name, " ", "_"))
 	pipeline.Commands = make(map[string]*Command)
 	pipeline.Links = make(map[string]*LinkInterface)
 	pipeline.Containers = make(map[string]*Container)

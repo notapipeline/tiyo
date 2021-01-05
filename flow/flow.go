@@ -7,9 +7,11 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
 
+	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/choclab-net/tiyo/config"
@@ -176,11 +178,50 @@ func (flow *Flow) WriteConfig() error {
 	return nil
 }
 
+func (flow *Flow) serve() {
+	log.Info("starting flow server - ", flow.Config.FlowServer())
+	mode := os.Getenv("TIYO_LOG")
+	if mode == "" {
+		mode = "production"
+	}
+	log.Info("Running in ", mode, " mode")
+	if mode != "debug" && mode != "trace" {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
+	var err error
+	server := gin.Default()
+	server.POST("/api/v1/register", flow.Queue.Register)
+
+	host := fmt.Sprintf("%s:%d", flow.Config.Flow.Host, flow.Config.Flow.Port)
+	log.Info(host)
+	if flow.Config.Flow.Cacert != "" && flow.Config.Flow.Cakey != "" {
+		err = server.RunTLS(
+			host, flow.Config.Flow.Cacert, flow.Config.Flow.Cakey)
+	} else {
+		err = server.Run(host)
+	}
+
+	if err != nil {
+		log.Fatal("Cannot run server. ", err)
+	}
+}
+
 func (flow *Flow) Run() int {
 	var (
 		err error
 	)
 	log.Info("Starting flow executor")
+	sigc := make(chan os.Signal, 1)
+	done := make(chan bool)
+
+	signal.Notify(sigc, os.Interrupt)
+	go func() {
+		for range sigc {
+			log.Info("Shutting down listener")
+			done <- true
+		}
+	}()
 
 	flow.Config, err = config.NewConfig()
 	if err != nil {
@@ -193,16 +234,19 @@ func (flow *Flow) Run() int {
 		log.Error("issue loading pipeline '%s' - %s", flow.Name, err)
 		return 1
 	}
+	flow.Queue = NewQueue(flow.Config, flow.Pipeline, flow.PipelineBucket)
 
-	flow.Queue = NewQueue(flow.Config, flow.PipelineBucket)
+	// Start server in background
+	go flow.serve()
 
+	// create docker engine
 	flow.Docker = NewDockerEngine(flow.Config)
 	if err != nil {
 		log.Error(err)
 		return 1
 	}
 
-	// This should be "Pipeline.Commands" - GetStart is only for minimal-set testing
+	// create all missing containers
 	for _, command := range flow.Pipeline.Commands {
 		log.Debug("Pipeline start item", command)
 		err := flow.Create(command)
@@ -211,23 +255,27 @@ func (flow *Flow) Run() int {
 		}
 	}
 
+	// create the Kubernetes engine
 	flow.Kubernetes, err = NewKubernetes(flow.Config, flow.Pipeline)
 	if err != nil {
 		log.Error(err)
 		return 1
 	}
 
-	for _, item := range flow.Pipeline.Containers {
+	// Create the pipeline runtime engine
+	// Each of these needs a level of error reporting enabling
+	// other than "panic"
+	/*for _, item := range flow.Pipeline.Containers {
 		switch item.SetType {
 		case "statefulset":
-			flow.Kubernetes.CreateStatefulSet(flow.Pipeline.Name, item)
+			go flow.Kubernetes.CreateStatefulSet(flow.Pipeline.Name, item)
 		case "deployment":
-			flow.Kubernetes.CreateDeployment(flow.Pipeline.Name, item)
+			go flow.Kubernetes.CreateDeployment(flow.Pipeline.Name, item)
 		case "daemonset":
-			flow.Kubernetes.CreateDaemonSet(flow.Pipeline.Name, item)
+			go flow.Kubernetes.CreateDaemonSet(flow.Pipeline.Name, item)
 		}
-	}
-
+	}*/
+	<-done
 	log.Info("Flow complete")
 	return 0
 }

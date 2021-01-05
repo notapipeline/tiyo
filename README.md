@@ -114,6 +114,16 @@ At present, there is no way to delete a pipeline via the GUI although it is poss
 a HTTP DELETE request using the [API](docs/api.md).
 
 ## Installation
+
+> Note:
+> To support the widest number of runtime containers, this application needs to be compiled with `CGO_ENABLED=0`
+>
+> This forces the net library to use go native commands rather than branching out into dynamically linked `C` libraries.
+> Testing shows binaries compiled without using this flag fail on Alpine. There may be others.
+>
+> If your container refuses to start with `binary not found`, either look for an alternate container, or compile with
+> this flag as appropriate.
+
 ```
 go get
 go-bindata-assetfs -o server/assets.go -pkg server server/assets/...

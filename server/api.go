@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -10,6 +11,8 @@ import (
 	"time"
 
 	"github.com/boltdb/bolt"
+	"github.com/choclab-net/tiyo/config"
+	"github.com/choclab-net/tiyo/pipeline"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 )
@@ -38,16 +41,20 @@ func NewResult() *Result {
 }
 
 type Api struct {
-	Db *bolt.DB
+	Db        *bolt.DB
+	Config    *config.Config
+	QueueSize map[string]int
 }
 
-func NewApi(dbName string) (*Api, error) {
+func NewApi(dbName string, config *config.Config) (*Api, error) {
 	api := Api{}
+	api.Config = config
 	var err error
 	api.Db, err = bolt.Open(dbName, 0600, &bolt.Options{Timeout: 2 * time.Second})
 	if err != nil {
 		return nil, err
 	}
+	api.QueueSize = make(map[string]int)
 	return &api, nil
 }
 
@@ -281,7 +288,7 @@ func (api *Api) Put(c *gin.Context) {
 			b = b.Bucket([]byte(child))
 		}
 
-		log.Debug(request, b)
+		//log.Debug(request, b)
 		err = b.Put([]byte(request["key"]), []byte(request["value"]))
 		if err != nil {
 			return fmt.Errorf("create kv: %s", err)
@@ -430,7 +437,6 @@ func (api *Api) PrefixScan(c *gin.Context) {
 }
 
 func (api *Api) KeyCount(c *gin.Context) {
-
 	result := Result{Result: "error"}
 	result.Code = 200
 	result.Result = "OK"
@@ -449,7 +455,7 @@ func (api *Api) KeyCount(c *gin.Context) {
 		return
 	}
 
-	count := 0
+	var count int = 0
 	if err := api.Db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(request["bucket"]))
 		if b != nil {
@@ -473,5 +479,163 @@ func (api *Api) KeyCount(c *gin.Context) {
 		result.Message = err
 	}
 	c.JSON(result.Code, result)
+}
 
+// Updates the given queue with new event items
+func (api *Api) PerpetualQueue(c *gin.Context) {
+	request := make(map[string]interface{})
+	if err := c.ShouldBind(&request); err != nil {
+		request["pipeline"] = c.PostForm("pipeline")
+		request["maxitems"] = c.PostForm("maxitems")
+	}
+	log.Info("Queue request ", request)
+	result := Result{
+		Code:    202,
+		Result:  "OK",
+		Message: "OK",
+	}
+
+	var (
+		pipelineName string
+		maxitems     int
+	)
+
+	if _, ok := request["pipeline"]; ok {
+		pipelineName = request["pipeline"].(string)
+	}
+	if _, ok := request["maxitems"]; ok {
+		maxitems = int(request["maxitems"].(float64))
+	}
+
+	pipeline, err := pipeline.GetPipeline(api.Config, pipelineName)
+	if err != nil {
+		result.Code = 500
+		result.Result = "Error"
+		result.Message = "Error opening pipeline " + pipelineName + " " + err.Error()
+		c.JSON(result.Code, result)
+		return
+	}
+	log.Debug("Got pipeline ", pipeline)
+
+	if _, ok := api.QueueSize[pipeline.BucketName]; !ok {
+		api.QueueSize[pipeline.BucketName] = maxitems
+	}
+
+	var count int = 0
+	if err := api.Db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("queue")).Bucket([]byte(pipeline.BucketName))
+		log.Debug("Starting queue count for ", pipelineName)
+		c := b.Cursor()
+		log.Debug(c)
+		for k, _ := c.First(); k != nil; k, _ = c.Next() {
+			log.Debug("K == ", k)
+			count++
+		}
+		return nil
+	}); err != nil {
+		log.Error(err)
+	}
+
+	log.Debug("Got ", count, " of ", api.QueueSize[pipeline.BucketName])
+	// get all files available for this command
+	if count < api.QueueSize[pipeline.BucketName] {
+		log.Debug("Starting walk for ", pipelineName)
+		available := api.QueueSize[pipeline.BucketName] - count
+		for _, command := range pipeline.GetStart() {
+			// walk pipeline from here
+			api.walkFiles(pipeline, command, &available)
+		}
+	}
+
+	c.JSON(result.Code, result)
+}
+
+func (api *Api) walkFiles(pipeline *pipeline.Pipeline, command *pipeline.Command, count *int) {
+	log.Debug("Walking ", command.Name, " ", command.Id)
+	sources := pipeline.GetPathSources(command)
+	available := make(map[string]map[string]string)
+	for _, source := range sources {
+		var bucket []byte = []byte("files")
+		if err := api.Db.View(func(tx *bolt.Tx) error {
+			b := tx.Bucket(bucket).Bucket([]byte(pipeline.BucketName))
+			c := b.Cursor()
+			for k, v := c.Seek([]byte(source)); k != nil && bytes.HasPrefix(k, []byte(source)); k, v = c.Next() {
+				if v != nil {
+					log.Debug("Appending ", k, "to available files")
+					body, _ := base64.StdEncoding.DecodeString(string(v))
+					content := make(map[string]string)
+					_ = json.Unmarshal(body, &content)
+					available[string(k)] = content
+					if len(available) >= *count {
+						break
+					}
+				}
+			}
+			return nil
+		}); err != nil {
+			log.Error(err)
+		}
+
+		tag := command.GetContainer(true)
+		// clear any statuses that are not "ready"
+		for k, content := range available {
+			// dont use file load status but check for our own...
+			// valid == missing|"ready"
+			if _, ok := content[tag]; ok {
+				if content[tag] != "ready" {
+					delete(available, k)
+				}
+			}
+		}
+
+		// Add to queue
+		added := make([]string, 0)
+		if err := api.Db.Update(func(tx *bolt.Tx) error {
+			b := tx.Bucket([]byte("queue")).Bucket([]byte(pipeline.BucketName))
+
+			for k := range available {
+				key := tag + ":" + k
+				com, _ := json.Marshal(command)
+				body := base64.StdEncoding.EncodeToString([]byte(com))
+
+				err := b.Put([]byte(key), []byte(body))
+				if err != nil {
+					return fmt.Errorf("create kv: %s", err)
+				}
+				added = append(added, k)
+				*count--
+				if *count == 0 {
+					break
+				}
+			}
+			return nil
+		}); err != nil {
+			log.Error(err)
+		}
+
+		// update files bucket to store state
+		if err := api.Db.Update(func(tx *bolt.Tx) error {
+			b := tx.Bucket([]byte("files")).Bucket([]byte(pipeline.BucketName))
+			for _, v := range added {
+				log.Debug("Adding ", command.Id, "to files/", pipeline.BucketName)
+				value := available[v]
+				value[tag] = "queued"
+				com, _ := json.Marshal(command)
+				body := base64.StdEncoding.EncodeToString([]byte(com))
+				err := b.Put([]byte(v), []byte(body))
+				if err != nil {
+					return fmt.Errorf("create kv: %s", err)
+				}
+			}
+
+			return nil
+		}); err != nil {
+			log.Error(err)
+		}
+	}
+	if *count != 0 {
+		for _, com := range pipeline.GetNext(command) {
+			api.walkFiles(pipeline, com, count)
+		}
+	}
 }

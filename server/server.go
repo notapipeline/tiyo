@@ -84,7 +84,7 @@ func (server *Server) Run() int {
 	log.Info("starting server.Apidb-browser..")
 
 	var err error
-	server.Api, err = NewApi(server.Dbname)
+	server.Api, err = NewApi(server.Dbname, server.Config)
 	if err != nil {
 		fmt.Println(err)
 		return 1
@@ -128,8 +128,11 @@ func (server *Server) Run() int {
 	server.Engine.GET("/api/v1/scan/:bucket", server.Api.PrefixScan)
 	server.Engine.GET("/api/v1/scan/:bucket/:child", server.Api.PrefixScan)
 	server.Engine.GET("/api/v1/scan/:bucket/:child/*key", server.Api.PrefixScan)
+
 	server.Engine.GET("/api/v1/count/:bucket", server.Api.KeyCount)
 	server.Engine.GET("/api/v1/count/:bucket/*child", server.Api.KeyCount)
+
+	server.Engine.POST("/api/v1/perpetualqueue", server.Api.PerpetualQueue)
 
 	if server.Config.Assemble.Cacert != "" && server.Config.Assemble.Cakey != "" {
 		err = server.Engine.RunTLS(
