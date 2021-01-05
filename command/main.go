@@ -5,10 +5,10 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/choclab-net/tiyo/fill"
 	"github.com/choclab-net/tiyo/flow"
 	"github.com/choclab-net/tiyo/server"
 	"github.com/choclab-net/tiyo/syphon"
-	"github.com/choclab-net/tiyo/watch"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -82,7 +82,7 @@ func Run(args []string) int {
 	case "assemble":
 		instance = server.NewServer()
 	case "fill":
-		instance = watch.NewWatch()
+		instance = fill.NewFill()
 	case "flow":
 		instance = flow.NewFlow()
 		break
