@@ -3,7 +3,7 @@
 
 Tiyo is a pipeline application written in GO with a graphical drag-drop interface using JointJS, UIKit and JQuery.
 
-> ### Warning: Pre, pre, pre pre-alpha product.
+> ### Warning: Pre-alpha product.
 >
 > Tiyo is still very much in the process of being born.
 >
@@ -12,9 +12,6 @@ Tiyo is a pipeline application written in GO with a graphical drag-drop interfac
 > It is not complete and should not be considered as such.
 >
 > Tiyo will be considered production ready when this banner disappears.
-
-The purpose of Tiyo is not to replace CI applications such as Jenkins/Travis/CircleCI, but to create, deploy and
-execute application sets inside a Kubernetes stack.
 
 The primary driver for creating this application is to serve as an easy to use tool for processing raw sequencing data
 with a long term goal of providing a one-click interface for deploying an entire cluster, running a pipeline and
@@ -96,10 +93,12 @@ integration. In future, there may be the option to choose between how you wish y
 ## Commands
 Tiyo may be executed in one of 4 separate modes from the same binary
 
-- `serve` Runs the web interface and API listening on default port 8180
-- `fill` Listens for file events and loads the file names
-- `flow` Builds the containers and prepares the instruction-set for execution
+- `Assemble` Runs the web interface for building (assembling) your pipeline. API listening on default port 8180
+- `fill` Listens for file events and loads the file names - writes to assemble
+- `flow` Builds the containers and prepares the instruction-set for execution. Backend API listening on default port 8280
+  reads from / writes to Assemble
 - `syphon` Executes the instruction set inside a container
+  Reads from Flow
 
 ## Storage
 Each pipeline is stored inside a BoltDB in base64 encoded JSON format. This format is a direct representation of the
@@ -136,9 +135,9 @@ Tiyo relies on a number of dependencies for its build and execution. These are s
 
 ### Front End:
 - JointJS - [https://github.com/clientIO/joint](https://github.com/clientIO/joint)
+- JQuery - [https://github.com/jquery/jquery](https://github.com/jquery/jquery)
 - UIKit - [https://github.com/uikit/uikit](https://github.com/uikit/uikit)
 - Navigo - [https://github.com/krasimir/navigo](https://github.com/krasimir/navigo)
-- JQuery - [https://github.com/jquery/jquery](https://github.com/jquery/jquery)
 - Handlebars - [https://github.com/handlebars-lang/handlebars.js](https://github.com/handlebars-lang/handlebars.js)
 - JSCookie - [https://github.com/js-cookie/js-cookie](https://github.com/js-cookie/js-cookie)
 - ACE - [https://github.com/ajaxorg/ace](https://github.com/ajaxorg/ace)

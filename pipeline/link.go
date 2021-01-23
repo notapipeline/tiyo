@@ -40,11 +40,11 @@ func GetLink(cell map[string]interface{}) Link {
 		link.Type = attrib["type"].(string)
 	}
 
-	if cell["source"] != nil {
+	if source["id"] != nil {
 		link.Source = source["id"].(string)
 	}
 
-	if cell["target"] != nil {
+	if target["id"] != nil {
 		link.Target = target["id"].(string)
 	}
 	return link

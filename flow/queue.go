@@ -12,6 +12,7 @@ import (
 
 	"github.com/choclab-net/tiyo/config"
 	"github.com/choclab-net/tiyo/pipeline"
+
 	"github.com/choclab-net/tiyo/server"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
@@ -19,16 +20,6 @@ import (
 
 // we should be able to make this fairly large
 const MAX_QUEUE_SIZE = 100000
-
-type QueueItem struct {
-	Status    string        `json:"status"` // loading|ready|inprogress|complete|failed
-	Pod       string        `json:"pod"`
-	Container string        `json:"container"`
-	Filename  string        `json:"filename"`
-	Event     string        `json:"event"`
-	Log       string        `json:"log"`
-	Command   SimpleCommand `json:"command"`
-}
 
 type Queue struct {
 	QueueBucket    string
@@ -39,6 +30,7 @@ type Queue struct {
 	Config         *config.Config
 	Pipeline       *pipeline.Pipeline
 	Client         *http.Client
+	stopped        bool
 }
 
 func NewQueue(config *config.Config, pipeline *pipeline.Pipeline, bucket string) *Queue {
@@ -52,11 +44,15 @@ func NewQueue(config *config.Config, pipeline *pipeline.Pipeline, bucket string)
 		Config:         config,
 		Pipeline:       pipeline,
 		Client:         &http.Client{},
+		stopped:        false,
 	}
 	queue.createBuckets()
 	go queue.perpetual()
 	return &queue
 }
+
+// TODO: Split this so the api method sits in API and the
+// queue management is here.
 
 // Register a container into the queue executors
 func (queue *Queue) Register(c *gin.Context) {
@@ -78,35 +74,56 @@ func (queue *Queue) Register(c *gin.Context) {
 	}
 
 	var key string = request["container"].(string) + ":" + request["pod"].(string)
+	log.Debug(queue.PodBucket)
 	data := queue.jsonBody(queue.PodBucket, key, request["status"].(string))
 	result := queue.put(c, data)
-	if request["status"] == "ready" {
-		result.Message = *queue.GetQueueItem(request["container"].(string), request["pod"].(string))
+	if request["status"] == "Ready" {
+		var (
+			code    int               = 202
+			message *server.QueueItem = nil
+		)
+		if !queue.stopped {
+			code, message = queue.GetQueueItem(request["container"].(string), request["pod"].(string))
+			result.Code = code
+		}
+		if message != nil {
+			result.Message = *message
+		} else {
+			result.Message = ""
+		}
 	}
 	c.JSON(result.Code, result)
 }
 
+func (queue *Queue) Stop() {
+	queue.stopped = true
+}
+
+func (queue *Queue) Start() {
+	queue.stopped = false
+}
+
 // Get a command to execute
-func (queue *Queue) GetQueueItem(container string, pod string) *QueueItem {
-	server := queue.Config.AssembleServer()
+func (queue *Queue) GetQueueItem(container string, pod string) (int, *server.QueueItem) {
+	serverAddress := queue.Config.AssembleServer()
 
 	var key string = container + ":" + pod
 	req, err := http.NewRequest(http.MethodGet,
-		server+"/api/v1/popqueue/"+queue.QueueBucket+"/"+queue.PipelineBucket+"/"+key, nil)
+		serverAddress+"/api/v1/popqueue/"+queue.Pipeline.Name+"/"+key, nil)
 	if err != nil {
 		panic(err)
 	}
 	req.Header.Set("Accept", "application/json")
-	_, body := queue.makeRequest(req)
+	code, body := queue.makeRequest(req)
 
-	item := QueueItem{}
+	item := server.QueueItem{}
 	err = json.Unmarshal(body, &item)
 	if err != nil {
 		log.Error(err)
-		return nil
+		return code, nil
 	}
 
-	return &item
+	return code, &item
 }
 
 // Put data into the bolt store
@@ -116,10 +133,10 @@ func (queue *Queue) put(c *gin.Context, request []byte) *server.Result {
 	result.Result = "No content"
 	result.Message = ""
 
-	server := queue.Config.AssembleServer()
+	serverAddress := queue.Config.AssembleServer()
 	req, err := http.NewRequest(
 		http.MethodPut,
-		fmt.Sprintf("%s/api/v1/bucket", server),
+		fmt.Sprintf("%s/api/v1/bucket", serverAddress),
 		bytes.NewBuffer(request))
 	if err != nil {
 		log.Fatal(err)
@@ -163,7 +180,7 @@ func (queue *Queue) makeRequest(request *http.Request) (int, []byte) {
 	}
 	if err != nil {
 		log.Error(err)
-		return response.StatusCode, nil
+		return 500, nil
 	}
 
 	defer response.Body.Close()
@@ -198,8 +215,8 @@ func (queue *Queue) createBuckets() {
 		if err != nil {
 			log.Error("Failed to create bucket ", bucket, "/", queue.PipelineBucket, " : ", err)
 		}
-		server := queue.Config.AssembleServer()
-		request, _ := http.NewRequest(http.MethodPost, server+"/api/v1/bucket", bytes.NewBuffer(body))
+		serverAddress := queue.Config.AssembleServer()
+		request, _ := http.NewRequest(http.MethodPost, serverAddress+"/api/v1/bucket", bytes.NewBuffer(body))
 		request.Header.Set("Content-Type", "application/json; charset=utf-8")
 		request.Header.Set("Connection", "close")
 		request.Close = true
@@ -208,21 +225,31 @@ func (queue *Queue) createBuckets() {
 }
 
 func (queue *Queue) perpetual() {
+	var first bool = true
 	for {
+		if !first {
+			time.Sleep(10 * time.Second)
+		}
+		if queue.stopped {
+			continue
+		}
+
+		first = false
 		log.Info("Updating queue for ", queue.Pipeline.Name)
 		content := make(map[string]interface{})
 		content["pipeline"] = queue.Pipeline.Name
 		content["maxitems"] = MAX_QUEUE_SIZE
 		data, _ := json.Marshal(content)
 
-		server := queue.Config.AssembleServer()
+		serverAddress := queue.Config.AssembleServer()
 		request, err := http.NewRequest(
 			http.MethodPost,
-			server+"/api/v1/perpetualqueue",
+			serverAddress+"/api/v1/perpetualqueue",
 			bytes.NewBuffer(data))
 
 		if err != nil {
 			log.Error(err)
+			continue
 		}
 		request.Header.Set("Content-Type", "application/json; charset=utf-8")
 		request.Header.Set("Connection", "close")
@@ -231,12 +258,13 @@ func (queue *Queue) perpetual() {
 		response, err := queue.Client.Do(request)
 		if err != nil {
 			log.Error(err)
+			continue
 		}
 
 		if response.StatusCode != http.StatusAccepted {
 			log.Error("Error during processing queue ", response)
+			continue
 		}
 		response.Body.Close()
-		time.Sleep(10 * time.Second)
 	}
 }

@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/choclab-net/tiyo/config"
-	"github.com/choclab-net/tiyo/flow"
+	"github.com/choclab-net/tiyo/server"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -35,7 +35,11 @@ func NewSyphon() *Syphon {
 	if err != nil {
 		log.Fatal("Cannot obtain hostname from system ", err)
 	}
+	// verification is key...
 	syphon.hostname = hostname
+	if hostname == "meteor.choclab.net" {
+		syphon.hostname = "example-pipeline-test-0"
+	}
 	return &syphon
 }
 
@@ -43,8 +47,7 @@ func NewSyphon() *Syphon {
 //
 // If status is 'ready', a command will be returned when
 // one is available. Otherwise, nil is returned
-func (syphon *Syphon) register(status string) *flow.QueueItem {
-	command := flow.QueueItem{}
+func (syphon *Syphon) register(status string) *server.QueueItem {
 	content := make(map[string]string)
 	content["pod"] = syphon.hostname
 	content["container"] = syphon.Config.AppName
@@ -57,7 +60,8 @@ func (syphon *Syphon) register(status string) *flow.QueueItem {
 		bytes.NewBuffer(data))
 
 	if err != nil {
-		log.Fatal(err)
+		log.Error(err)
+		return nil
 	}
 	request.Header.Set("Content-Type", "application/json; charset=utf-8")
 	request.Header.Set("Connection", "close")
@@ -66,10 +70,20 @@ func (syphon *Syphon) register(status string) *flow.QueueItem {
 	response, err := syphon.client.Do(request)
 	if err != nil {
 		log.Error(err)
+		return nil
 	}
 
-	if response.StatusCode == http.StatusAccepted || response.StatusCode == http.StatusAlreadyReported {
+	var message string = ""
+	if response.StatusCode == http.StatusAccepted || response.StatusCode == http.StatusNoContent {
 		// Flow has accepted our update but has no command to return
+		message = "No command returned. Sleeping for 10 seconds before checking again"
+	} else if response.StatusCode == 404 {
+		// The queue has not been loaded
+		message = "No queue or no queue active - sleeping for 10 seconds before checking again"
+	}
+
+	if message != "" {
+		log.Info(message)
 		response.Body.Close()
 		return nil
 	}
@@ -79,9 +93,15 @@ func (syphon *Syphon) register(status string) *flow.QueueItem {
 	body, err = ioutil.ReadAll(response.Body)
 	if err != nil {
 		log.Error(err)
+		return nil
 	}
 
-	err = json.Unmarshal(body, &command)
+	log.Debug(string(body))
+	command := server.QueueItem{}
+	result := server.Result{
+		Message: &command,
+	}
+	err = json.Unmarshal(body, &result)
 	if err != nil {
 		log.Error(err)
 		return nil
@@ -89,13 +109,16 @@ func (syphon *Syphon) register(status string) *flow.QueueItem {
 	return &command
 }
 
-func (syphon *Syphon) execute(command *flow.QueueItem) {
-
+func (syphon *Syphon) execute(queueItem *server.QueueItem) {
+	command := queueItem.Command
+	log.Debug("Recieved filename ", queueItem.Filename, " with command ", command)
+	command.Execute(queueItem.PipelineFolder, queueItem.Filename, queueItem.Event)
 }
 
-// Syphon will not have an initialiser. Everything will be through the API
+// Syphon will not have an initialiser.
 func (syphon *Syphon) Init() {}
 
+// Run the syphon command executor
 func (syphon *Syphon) Run() int {
 	log.Info("Starting tiyo syphon")
 	sigc := make(chan os.Signal, 1)
@@ -111,8 +134,8 @@ func (syphon *Syphon) Run() int {
 	go func() {
 		for {
 			log.Info("Polling ", syphon.Config.Flow.Host, ":", syphon.Config.Flow.Port)
-			if command := syphon.register("ready"); command != nil {
-				syphon.register("busy")
+			if command := syphon.register("Ready"); command != nil {
+				syphon.register("Busy")
 				syphon.execute(command)
 			}
 

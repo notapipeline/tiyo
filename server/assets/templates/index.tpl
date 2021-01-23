@@ -2,21 +2,22 @@
 <html>
     <head>
         <title>[[ .Title ]]</title>
-        <link rel="stylesheet" href="/static/css/uikit.min.css" />
-        <link rel="stylesheet" href="/static/css/joint.min.css" />
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/uikit@3.6.11/dist/css/uikit.min.css" />
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jointjs@3.2.0/dist/joint.min.css" />
         <link rel="stylesheet" type="text/css" href="/static/css/dashboard.css">
 
         <script src="https://cdn.jsdelivr.net/npm/js-cookie@rc/dist/js.cookie.min.js"></script>
-        <script type="text/javascript" src="/static/js/lib/jquery-3.5.1.min.js"></script>
-        <script src="/static/js/lib/uikit.min.js"></script>
-        <script src="/static/js/lib/uikit-icons.min.js"></script>
-        <script src="https://cdn.jsdelivr.net/npm/navigo/lib/navigo.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/jquery@3.5.1/dist/jquery.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/uikit@3.6.11/dist/js/uikit.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/uikit@3.6.11/dist/js/uikit-icons.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/navigo@8.6.3/lib/navigo.min.js"></script>
 
         <!-- Joint JS and requirements -->
-        <script src="/static/js/lib/lodash.js"></script>
-        <script src="/static/js/lib/backbone.js"></script>
-        <script src="/static/js/lib/joint.min.js"></script>
-        <script type="text/javascript" src="/static/js/lib/4.0.5_handlebars.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/lodash@4.17.20/lodash.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/backbone@1.4.0/backbone.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/jointjs@3.2.0/dist/joint.min.js"></script>
+
+        <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/handlebars@4.7.6/dist/handlebars.js"></script>
         <script type="text/javascript" src="/static/js/lib/jquery.editable.min.js"></script>
     </head>
     <body>
@@ -41,7 +42,17 @@
                     </div>
                     <div class="uk-navbar-right">
                         <ul class="uk-navbar-nav">
-                            <li><a class="uk-navbar-toggle" data-uk-toggle data-uk-navbar-toggle-icon href="#offcanvas-nav" title="Offcanvas" data-uk-tooltip></a></li>
+                            <li>
+                                <a class="uk-width-1-1 uk-button uk-button uk-button-small" onclick="pipeline.execute()">Execute</a>
+                            </li>
+                            <li>
+                                <a class="uk-width-1-1 uk-button uk-button uk-button-small" style="color: red;" onclick="pipeline.destroy()" uk-icon="trash">&nbsp;</a>
+                            </li>                            <li>
+                                <a id="play" class="uk-width-1-1 uk-button uk-button uk-button-small" style="color: red;" onclick="pipeline.playpause()" uk-icon="ban">&nbsp;</a>
+                            </li>
+                            <li style="margin-left: 50px;">
+                                <a class="uk-navbar-toggle" data-uk-toggle data-uk-navbar-toggle-icon href="#offcanvas-nav" title="Offcanvas" data-uk-tooltip></a>
+                            </li>
                         </ul>
                     </div>
                 </nav>
@@ -64,28 +75,45 @@
                     </li>
                 </ul>
             </nav>
-            <div class="uk-flex uk-flex-middle uk-margin-bottom">
-            <ul uk-sortable="handle: .pipeline-element" class="uk-grid-stack uk-height-max-large" id="pipeline-element-list"></ul>
-            </div>
-            <div class="uk-flex uk-flex-middle uk-margin-bottom">
-            <ul uk-sortable="handle: .pipeline-link" class="uk-grid-stack uk-height-max-large" id="pipeline-link-list">
-                <li class="uk-card uk-card-default uk-card-body pipeline-list pipeline-link">
-                    <p>FILE</p>
+            <ul uk-accordion="multiple: true; collapsible: false;">
+                <li>
+                    <a class="uk-accordion-title">Source</a>
+                    <div class="uk-accordion-content uk-flex uk-flex-middle uk-margin-bottom">
+                        <ul uk-sortable="handle: .source-element" class="uk-grid-stack uk-height-max-large element-list" id="source-element-list"></ul>
+                    </div>
                 </li>
-                <li class="uk-card uk-card-default uk-card-body pipeline-link" style="color: blue;">
-                    <p>TCP</p>
+                <li>
+                    <a class="uk-accordion-title">Kubernetes</a>
+                    <div class="uk-accordion-content uk-flex uk-flex-middle uk-margin-bottom">
+                        <ul uk-sortable="handle: .kubernetes-element" class="uk-grid-stack uk-height-max-large element-list" id="kubernetes-element-list"></ul>
+                    </div>
                 </li>
-                <li class="uk-card uk-card-default uk-card-body pipeline-link" style="color: orange;">
-                    <p>UDP</p>
+                <li>
+                    <a class="uk-accordion-title">Element types</a>
+                    <div class="uk-accordion-content uk-flex uk-flex-middle uk-margin-bottom">
+                        <ul uk-sortable="handle: .container-element" class="uk-grid-stack uk-height-max-large element-list" id="container-element-list"></ul>
+                    </div>
                 </li>
-                <li class="uk-card uk-card-default uk-card-body pipeline-link" style="color: red;">
-                    <p>SOCKET</p>
+                <li>
+                    <a class="uk-accordion-title">Link types</a>
+                    <div class="uk-accordion-content uk-flex uk-flex-middle uk-margin-bottom">
+                        <ul uk-sortable="handle: .pipeline-link" class="uk-grid-stack uk-height-max-large element-list" id="pipeline-link-list">
+                            <li class="uk-card uk-card-default uk-card-body element-list-element pipeline-list pipeline-link" uk-tooltip="file connector">
+                                <p>FILE</p>
+                            </li>
+                            <li class="uk-card uk-card-default uk-card-body element-list-element pipeline-link" style="color: blue;" uk-tooltip="tcp connector">
+                                <p>TCP</p>
+                            </li>
+                            <li class="uk-card uk-card-default uk-card-body element-list-element pipeline-link" style="color: orange;" uk-tooltip="udp connector">
+                                <p>UDP</p>
+                            </li>
+                            <li class="uk-card uk-card-default uk-card-body element-list-element pipeline-link" style="color: red;" uk-tooltip="unix socket connector">
+                                <p>SOCKET</p>
+                            </li>
+                        </ul>
+                    </div>
                 </li>
             </ul>
-            </div>
-            <div class="uk-flex uk-flex-middle uk-margin-bottom">
-            <ul uk-sortable="handle: .kubernetes-element" class="uk-grid-stack uk-height-max-large" id="kubernetes-element-list"></ul>
-            </div>
         </aside>
         <article id="content" class="uk-container-center uk-margin-large-bottom" data-uk-height-viewport="expand: true">
 
@@ -197,29 +225,42 @@
                     <li><div id="upload">Not implemented</div></li>
                 </ul>
                 <div id="scriptentrybuttons" style="float: right; margin-top: 10px;">
-                    <button class="uk-button uk-button-small uk-modal-close" onclick="cancelScript()">Cancel </button>
-                    <button class="uk-button uk-button-primary uk-button-small" onclick="saveScript()">Save</button>
+                    <button class="uk-button uk-button-small uk-modal-close" onclick="pipeline.cancelScript()">Cancel </button>
+                    <button class="uk-button uk-button-primary uk-button-small" onclick="pipeline.saveScript()">Save</button>
                 </div>
             </div>
         </div>
     </body>
+
+
 <!-- Mustache templates -->
 
-<script id="languagestpl" type="x-tmpl-mustache">
+<script id="sourcetpl" type="x-tmpl-mustache">
 {{#list}}
-<li class="uk-card uk-card-default uk-card-body pipeline-element">
-    <image src="/static/img/languages/{{.}}.svg" alt="{{.}}" uk-tooltip="{{.}}" />
+<li class="uk-card uk-card-default uk-card-body source-element element-list-element">
+    <image src="/static/img/source/{{.}}.svg" alt="{{.}}" uk-tooltip="{{.}}" />
 </li>
 {{/list}}
 </script>
 
 <script id="kubernetestpl" type="x-tmpl-mustache">
 {{#list}}
-<li class="uk-card uk-card-default uk-card-body kubernetes-element">
+<li class="uk-card uk-card-default uk-card-body kubernetes-element element-list-element">
     <image src="/static/img/kubernetes/{{.}}.svg" alt="{{.}}" uk-tooltip="{{.}}" />
 </li>
 {{/list}}
 </script>
+
+<script id="containertpl" type="x-tmpl-mustache">
+{{#list}}
+<li class="uk-card uk-card-default uk-card-body container-element element-list-element">
+    <image src="/static/img/container/{{.}}.svg" alt="{{.}}" uk-tooltip="{{.}}" />
+</li>
+{{/list}}
+</script>
+
+
+
 
 <!-- buckets -->
 <script id="template" type="x-tmpl-mustache">
@@ -283,9 +324,28 @@
 </script>
 
 <!-- Page load scripts -->
-<script src="/static/js/lib/ace/ace.js" type="text/javascript" charset="utf-8"></script>
-<script src="/static/js/page.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/ace.min.js"></script>
+<script language="javascript">
+ace.config.set("packaged", true);
+ace.config.set("basePath", "https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/");
+
+
+var links = [];
+var defaultAttrs = {
+    kubernetes: {
+        scale: 0,
+    },
+    container: {
+        script: true,
+        custom: true,
+    },
+    source: {}
+}
+</script>
+
+<script src="/static/js/collections/collection.js"></script>
 <script src="/static/js/pipeline.js"></script>
+<script src="/static/js/page.js"></script>
 <script src="/static/js/api.js"></script>
 <script src="/static/js/router.js"></script>
 </html>

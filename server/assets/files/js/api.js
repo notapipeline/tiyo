@@ -136,7 +136,7 @@ function put(b, c, k, v) {
     if (typeof(b) === 'undefined') {
         b = $('#bucket').val();
     }
-    
+
     if (typeof(c) === 'undefined' || c === null) {
         c = "";
         if (b.includes('/')) {
@@ -145,7 +145,7 @@ function put(b, c, k, v) {
             c = parts[1];
         }
     }
-    
+
     if (typeof(k) === 'undefined') {
         k = $('#key').val();
     }
@@ -160,7 +160,7 @@ function scan(v) {
     $('#pfs').html("");
     var source = $('#exploretpl').html();
     var template = Handlebars.compile(source);
-    
+
     var bucket = $('#pbucket').val();
     if (bucket === "") {
         bucket = Cookies.get('bucket');

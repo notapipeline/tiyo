@@ -9,9 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strings"
 
-	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/choclab-net/tiyo/config"
@@ -19,19 +17,22 @@ import (
 )
 
 type Flow struct {
-	Name           string
-	PipelineBucket string
-	Update         bool
-	Config         *config.Config
-	Pipeline       *pipeline.Pipeline
-	Docker         *Docker
-	Kubernetes     *Kubernetes
-	Flags          *flag.FlagSet
-	Queue          *Queue
+	Name        string
+	Update      bool
+	Config      *config.Config
+	Pipeline    *pipeline.Pipeline
+	Docker      *Docker
+	Kubernetes  *Kubernetes
+	Flags       *flag.FlagSet
+	Queue       *Queue
+	IsExecuting bool
+	Api         *FlowApi
 }
 
 func NewFlow() *Flow {
 	flow := Flow{}
+	flow.Api = NewFlowApi(&flow)
+	flow.IsExecuting = false
 	return &flow
 }
 
@@ -43,11 +44,6 @@ func (flow *Flow) Init() {
 	flow.Flags.StringVar(&flow.Name, "p", flow.Name, description)
 	flow.Flags.BoolVar(&flow.Update, "u", false, "Update any containers")
 	flow.Flags.Parse(os.Args[2:])
-	if flow.Name == "" {
-		flow.Flags.Usage()
-		os.Exit(1)
-	}
-	flow.PipelineBucket = strings.ToLower(strings.ReplaceAll(flow.Name, " ", "_"))
 	log.Debug("Flow initialised", flow)
 }
 
@@ -75,7 +71,7 @@ func (flow *Flow) Create(instance *pipeline.Command) error {
 		os.MkdirAll(path, 0775)
 		os.Chdir(path)
 		log.Debug("Changing to build path", path)
-		if err := flow.WriteDockerfile(instance.Image); err != nil {
+		if err := flow.WriteDockerfile(instance); err != nil {
 			return flow.Cleanup(path, owd, err)
 		}
 
@@ -97,26 +93,30 @@ func (flow *Flow) Create(instance *pipeline.Command) error {
 
 func (flow *Flow) Cleanup(path string, owd string, err error) error {
 	os.Chdir(owd)
-	if err := os.RemoveAll(path); err != nil {
+	if e := os.RemoveAll(path); e != nil {
 		log.Error("Failed to clean up %s - manual intervention required\n", path)
 	}
 	return err
 }
 
-func (flow *Flow) WriteDockerfile(containerName string) error {
-	log.Debug("Creating Dockerfile ", containerName)
+func (flow *Flow) WriteDockerfile(instance *pipeline.Command) error {
+	log.Info("Creating Dockerfile ", instance.Image)
 	var name string = "Dockerfile"
-	template := fmt.Sprintf(dockerTemplate, containerName)
+	template := fmt.Sprintf(dockerTemplate, instance.Image)
+	if instance.Language == "dockerfile" && instance.Custom {
+		template = instance.ScriptContent
+	}
+
 	file, err := os.Create(name)
 	if err != nil {
-		return fmt.Errorf("Failed to create Dockerfile for %s. %s", containerName, err)
+		return fmt.Errorf("Failed to create Dockerfile for %s. %s", instance.Name, err)
 	}
 	defer file.Close()
 	if _, err := file.WriteString(template); err != nil {
 		return fmt.Errorf("Failed to write Dockerfile for %s. Error was: %s", name, err)
 	}
 	file.Sync()
-	log.Debug("Dockerfile written: ", containerName)
+	log.Debug("Dockerfile written: ", instance.Image)
 	return nil
 }
 
@@ -159,13 +159,13 @@ func (flow *Flow) WriteConfig() error {
 	path, _ := os.Getwd()
 	config := struct {
 		SequenceBaseDir string      `json:"sequenceBaseDir"`
-		UseInsecureTLS  bool        `json:"skip_verify"`
-		Assemble        config.Host `json:"assemble"`
+		UseInsecureTLS  bool        `json:"skipVerify"`
+		Flow            config.Host `json:"flow"`
 		AppName         string      `json:"appname"`
 	}{
 		SequenceBaseDir: flow.Config.SequenceBaseDir,
 		UseInsecureTLS:  flow.Config.UseInsecureTLS,
-		Assemble:        flow.Config.Assemble,
+		Flow:            flow.Config.Flow,
 		AppName:         filepath.Base(path),
 	}
 	bytes, err := json.Marshal(config)
@@ -178,32 +178,83 @@ func (flow *Flow) WriteConfig() error {
 	return nil
 }
 
-func (flow *Flow) serve() {
-	log.Info("starting flow server - ", flow.Config.FlowServer())
-	mode := os.Getenv("TIYO_LOG")
-	if mode == "" {
-		mode = "production"
-	}
-	log.Info("Running in ", mode, " mode")
-	if mode != "debug" && mode != "trace" {
-		gin.SetMode(gin.ReleaseMode)
-	}
-
+func (flow *Flow) Setup(pipelineName string) bool {
+	flow.Name = pipelineName
 	var err error
-	server := gin.Default()
-	server.POST("/api/v1/register", flow.Queue.Register)
 
-	host := fmt.Sprintf("%s:%d", flow.Config.Flow.Host, flow.Config.Flow.Port)
-	log.Info(host)
-	if flow.Config.Flow.Cacert != "" && flow.Config.Flow.Cakey != "" {
-		err = server.RunTLS(
-			host, flow.Config.Flow.Cacert, flow.Config.Flow.Cakey)
-	} else {
-		err = server.Run(host)
+	// Load the pipeline
+	flow.Pipeline, err = pipeline.GetPipeline(flow.Config, flow.Name)
+	if err != nil {
+		log.Error("issue loading pipeline ", flow.Name, " - ", err)
+		return false
 	}
 
+	// Create the queue
+	flow.Queue = NewQueue(flow.Config, flow.Pipeline, flow.Pipeline.BucketName)
+
+	// create docker engine
+	flow.Docker = NewDockerEngine(flow.Config)
 	if err != nil {
-		log.Fatal("Cannot run server. ", err)
+		log.Error(err)
+		return false
+	}
+
+	// create the Kubernetes engine
+	flow.Kubernetes, err = NewKubernetes(flow.Config, flow.Pipeline)
+	if err != nil {
+		log.Error(err)
+		return false
+	}
+	return true
+}
+
+func (flow *Flow) Execute() {
+	flow.IsExecuting = true
+	// create all missing containers
+	for _, command := range flow.Pipeline.Commands {
+		log.Debug("Pipeline start item", command)
+		err := flow.Create(command)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	// Create the pipeline runtime engine
+	// Each of these needs a level of error reporting enabling
+	// other than "panic"
+	for _, item := range flow.Pipeline.Containers {
+		switch item.SetType {
+		case "statefulset":
+			go flow.Kubernetes.CreateStatefulSet(flow.Pipeline.DnsName, item)
+		case "deployment":
+			go flow.Kubernetes.CreateDeployment(flow.Pipeline.DnsName, item)
+		case "daemonset":
+			go flow.Kubernetes.CreateDaemonSet(flow.Pipeline.DnsName, item)
+		}
+	}
+}
+
+func (flow *Flow) Stop() {
+	flow.IsExecuting = false
+	flow.Queue.Stop()
+}
+
+func (flow *Flow) Start() {
+	flow.IsExecuting = true
+	flow.Queue.Start()
+}
+
+func (flow *Flow) Destroy() {
+	flow.Stop()
+	for _, item := range flow.Pipeline.Containers {
+		switch item.SetType {
+		case "statefulset":
+			go flow.Kubernetes.DestroyStatefulSet(flow.Pipeline.DnsName, item)
+		case "deployment":
+			go flow.Kubernetes.DestroyDeployment(flow.Pipeline.DnsName, item)
+		case "daemonset":
+			go flow.Kubernetes.DestroyDaemonSet(flow.Pipeline.DnsName, item)
+		}
 	}
 }
 
@@ -225,56 +276,16 @@ func (flow *Flow) Run() int {
 
 	flow.Config, err = config.NewConfig()
 	if err != nil {
-		log.Error("issue loading config file: %s\n", err)
+		log.Error("issue loading config file: ", err)
 		return 1
 	}
-
-	flow.Pipeline, err = pipeline.GetPipeline(flow.Config, flow.Name)
-	if err != nil {
-		log.Error("issue loading pipeline '%s' - %s", flow.Name, err)
-		return 1
-	}
-	flow.Queue = NewQueue(flow.Config, flow.Pipeline, flow.PipelineBucket)
 
 	// Start server in background
-	go flow.serve()
-
-	// create docker engine
-	flow.Docker = NewDockerEngine(flow.Config)
-	if err != nil {
-		log.Error(err)
-		return 1
+	go flow.Api.Serve()
+	if flow.Name != "" {
+		flow.Setup(flow.Name)
+		flow.Execute()
 	}
-
-	// create all missing containers
-	for _, command := range flow.Pipeline.Commands {
-		log.Debug("Pipeline start item", command)
-		err := flow.Create(command)
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
-
-	// create the Kubernetes engine
-	flow.Kubernetes, err = NewKubernetes(flow.Config, flow.Pipeline)
-	if err != nil {
-		log.Error(err)
-		return 1
-	}
-
-	// Create the pipeline runtime engine
-	// Each of these needs a level of error reporting enabling
-	// other than "panic"
-	/*for _, item := range flow.Pipeline.Containers {
-		switch item.SetType {
-		case "statefulset":
-			go flow.Kubernetes.CreateStatefulSet(flow.Pipeline.Name, item)
-		case "deployment":
-			go flow.Kubernetes.CreateDeployment(flow.Pipeline.Name, item)
-		case "daemonset":
-			go flow.Kubernetes.CreateDaemonSet(flow.Pipeline.Name, item)
-		}
-	}*/
 	<-done
 	log.Info("Flow complete")
 	return 0

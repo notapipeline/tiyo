@@ -1,18 +1,21 @@
 package pipeline
 
 type Container struct {
-	Id       string
-	Name     string
-	Scale    int32
-	Children []string
-	SetType  string
+	Id        string
+	Name      string
+	Scale     int32
+	Children  []string
+	SetType   string
+	State     string
+	LastCount int
 
 	Pipeline *Pipeline
 }
 
 func NewContainer(pipeline *Pipeline, cell map[string]interface{}) *Container {
 	container := Container{
-		Pipeline: pipeline,
+		Pipeline:  pipeline,
+		LastCount: 0,
 	}
 
 	if cell["id"] != nil {
@@ -20,7 +23,7 @@ func NewContainer(pipeline *Pipeline, cell map[string]interface{}) *Container {
 	}
 
 	if cell["name"] != nil {
-		container.Name = cell["name"].(string)
+		container.Name = sanitize(cell["name"].(string), "-")
 	}
 
 	if cell["settype"] != nil {

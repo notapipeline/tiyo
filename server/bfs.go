@@ -44,28 +44,14 @@ func GetBFS(root string) *BFS {
 	return &BFS{fs, root}
 }
 
-func (bfs *BFS) Languages(c *gin.Context) {
+func (bfs *BFS) Collection(c *gin.Context) {
 	result := Result{}
 	result.Code = 200
 	result.Result = "OK"
 	var err error
+	var collection = c.Params.ByName("collection")
 	result.Message = make([]string, 0)
-	result.Message, err = AssetDir(fmt.Sprintf("%s/img/languages", bfs.Root))
-	if err != nil {
-		result.Code = 404
-		result.Result = "Error"
-		result.Message = err
-	}
-	c.JSON(result.Code, result)
-}
-
-func (bfs *BFS) Kubernetes(c *gin.Context) {
-	result := Result{}
-	result.Code = 200
-	result.Result = "OK"
-	var err error
-	result.Message = make([]string, 0)
-	result.Message, err = AssetDir(fmt.Sprintf("%s/img/kubernetes", bfs.Root))
+	result.Message, err = AssetDir(fmt.Sprintf("%s/img/%s", bfs.Root, collection))
 	if err != nil {
 		result.Code = 404
 		result.Result = "Error"

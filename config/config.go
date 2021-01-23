@@ -28,8 +28,8 @@ type Kubernetes struct {
 
 type Docker struct {
 	Registry   string `json:"registry"`
-	Username   string `json:"username"` // Future - to come from Vault
-	Token      string `json:"token"`    // Future - to come from Vault
+	Username   string `json:"username"`
+	Token      string `json:"token"`
 	Upstream   string `json:"upstream"`
 	Primary    string `json:"primary"`
 	SameSource bool   `default:"false"`
@@ -37,17 +37,21 @@ type Docker struct {
 
 type Config struct {
 	SequenceBaseDir string     `json:"sequenceBaseDir"`
+	ExternalNginx   bool       `json:"externalNginx"`
 	Dbname          string     `json:"dbname"`
-	UseInsecureTLS  bool       `json:"skip_verify"`
+	UseInsecureTLS  bool       `json:"skipVerify"`
 	Assemble        Host       `json:"assemble"`
 	Flow            Host       `json:"flow"`
 	Kubernetes      Kubernetes `json:"kubernetes"`
 	Docker          Docker     `json:"docker"`
 	AppName         string     `json:"appname"`
+	DnsName         string     `json:"dnsName"`
 }
 
 func NewConfig() (*Config, error) {
-	config := Config{}
+	config := Config{
+		DnsName: "example.com",
+	}
 	jsonFile, err := os.Open("config.json")
 	if err != nil {
 		return nil, err

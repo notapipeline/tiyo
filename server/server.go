@@ -122,8 +122,7 @@ func (server *Server) Run() int {
 	server.Engine.DELETE("/api/v1/bucket/:bucket/:child/*key", server.Api.DeleteKey)
 
 	server.Engine.GET("/api/v1/containers", server.Api.Containers)
-	server.Engine.GET("/api/v1/languages", bfs.Languages)
-	server.Engine.GET("/api/v1/kubernetes", bfs.Kubernetes)
+	server.Engine.GET("/api/v1/collections/:collection", bfs.Collection)
 
 	server.Engine.GET("/api/v1/scan/:bucket", server.Api.PrefixScan)
 	server.Engine.GET("/api/v1/scan/:bucket/:child", server.Api.PrefixScan)
@@ -132,7 +131,14 @@ func (server *Server) Run() int {
 	server.Engine.GET("/api/v1/count/:bucket", server.Api.KeyCount)
 	server.Engine.GET("/api/v1/count/:bucket/*child", server.Api.KeyCount)
 
+	server.Engine.GET("/api/v1/popqueue/:pipeline/:key", server.Api.PopQueue)
 	server.Engine.POST("/api/v1/perpetualqueue", server.Api.PerpetualQueue)
+
+	server.Engine.GET("/api/v1/status/:pipeline", server.Api.FlowStatus)
+	server.Engine.POST("/api/v1/execute", server.Api.ExecuteFlow)
+	server.Engine.POST("/api/v1/startflow", server.Api.StartFlow)
+	server.Engine.POST("/api/v1/stopflow", server.Api.StopFlow)
+	server.Engine.POST("/api/v1/destroyflow", server.Api.DestroyFlow)
 
 	if server.Config.Assemble.Cacert != "" && server.Config.Assemble.Cakey != "" {
 		err = server.Engine.RunTLS(

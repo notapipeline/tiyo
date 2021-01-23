@@ -265,10 +265,7 @@ form.uk-panel-box {
     border-radius: 4px !important;
 }
 
-.applicationProperties,
-.containerProperties,
-.tcpProperties,
-.socketProperties {
+.properties {
     width: fit-content;
     height: fit-content;
     background-color: #222A30;
@@ -278,10 +275,7 @@ form.uk-panel-box {
     z-index: 1000;
 }
 
-.applicationProperties label,
-.containerProperties label,
-.tcpProperties label,
-.socketProperties label {
+.properties label {
     width: 50px;
 }
 
@@ -345,18 +339,18 @@ section#pipeline > div.uk-grid {
     padding: 10px 5px 5px;
 }
 
-#pipeline-element-list, #pipeline-link-list, #kubernetes-element-list {
+.element-list {
     padding-left: 10px;
 }
 
-.pipeline-element, .pipeline-link, .kubernetes-element {
+.element-list-element {
     float: left;
     background: none;
     fill: none;
     margin: 0 10px 10px;
 }
 
-.pipeline-element > img, .pipeline-link > p, .kubernetes-element > img {
+.element-list-element > img {
     width: 30px;
     cursor: move;
 }
@@ -387,6 +381,17 @@ ul#scriptsource li {
     position: relative;
     height: 100%;
 }
+
+
+.uk-accordion-title {
+    color: rgba(255,255,255,.5) !important;
+    padding: 0px 10px;
+}
+
+.uk-accordion-title::before {
+    background-image: none !important;
+}
+
 
 .joint-link.joint-theme-default .marker-vertex {
     r: 3;

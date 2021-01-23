@@ -3,8 +3,9 @@ package pipeline
 // Socket / Path connections
 type PathLink struct {
 	Link
-	Path  string
-	Watch bool
+	Path    string
+	Pattern string
+	Watch   bool
 }
 
 func (path *PathLink) GetType() string {
@@ -24,12 +25,16 @@ func NewPathLink(cell map[string]interface{}) *PathLink {
 			Source: link.Source,
 			Target: link.Target,
 		},
-		"", false,
+		"", "", false,
 	}
 	attrib := cell["attributes"].(map[string]interface{})
 
 	if attrib["path"] != nil {
 		path.Path = attrib["path"].(string)
+	}
+
+	if attrib["pattern"] != nil {
+		path.Pattern = attrib["pattern"].(string)
 	}
 
 	if attrib["watch"] != nil {

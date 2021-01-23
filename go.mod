@@ -2,10 +2,13 @@ module github.com/choclab-net/tiyo
 
 go 1.15
 
+replace github.com/coreos/go-systemd => github.com/coreos/go-systemd/v22 v22.1.0
+
 require (
 	github.com/Microsoft/go-winio v0.4.16 // indirect
 	github.com/boltdb/bolt v1.3.1
 	github.com/containerd/containerd v1.4.3 // indirect
+	github.com/coreos/go-systemd v0.0.0-00010101000000-000000000000
 	github.com/docker/distribution v2.7.1+incompatible // indirect
 	github.com/docker/docker v20.10.1+incompatible
 	github.com/docker/go-connections v0.4.0 // indirect

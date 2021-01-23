@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/boltdb/bolt"
@@ -24,6 +25,13 @@ type GithubResponse struct {
 	Type string `json:"type"`
 }
 
+type QueueItem struct {
+	PipelineFolder string           `json:"pipelineFolder"`
+	Filename       string           `json:"filename"`
+	Event          string           `json:"event"`
+	Command        pipeline.Command `json:"command"`
+}
+
 type Result struct {
 	Code    int         `json:"code"`
 	Result  string      `json:"result"`
@@ -35,6 +43,11 @@ type ScanResult struct {
 	Keys    map[string]string `json:"keys"`
 }
 
+type Lock struct {
+	sync.Mutex
+	locks []string
+}
+
 func NewResult() *Result {
 	result := Result{}
 	return &result
@@ -44,6 +57,7 @@ type Api struct {
 	Db        *bolt.DB
 	Config    *config.Config
 	QueueSize map[string]int
+	queueLock *Lock
 }
 
 func NewApi(dbName string, config *config.Config) (*Api, error) {
@@ -55,6 +69,10 @@ func NewApi(dbName string, config *config.Config) (*Api, error) {
 		return nil, err
 	}
 	api.QueueSize = make(map[string]int)
+	lock := Lock{
+		locks: make([]string, 0),
+	}
+	api.queueLock = &lock
 	return &api, nil
 }
 
@@ -100,7 +118,6 @@ func (api *Api) Containers(c *gin.Context) {
 }
 
 func (api *Api) Buckets(c *gin.Context) {
-
 	result := NewResult()
 	result.Code = 200
 	result.Result = "OK"
@@ -481,6 +498,294 @@ func (api *Api) KeyCount(c *gin.Context) {
 	c.JSON(result.Code, result)
 }
 
+// Execute the current pipeline
+//
+// Flow execution is handed off to the flow api to build the infrastructure
+// and begin executing the queue.
+//
+// This should be a straight pass-through and flow should be responsible for
+// verifying if infrastructure has/has not already been built or the pipeline
+// is already in the process of being executed.
+func (api *Api) ExecuteFlow(c *gin.Context) {
+	api.forwardPost(c, "execute")
+}
+
+func (api *Api) StopFlow(c *gin.Context) {
+	api.forwardPost(c, "stop")
+}
+
+func (api *Api) StartFlow(c *gin.Context) {
+	api.forwardPost(c, "start")
+}
+
+func (api *Api) DestroyFlow(c *gin.Context) {
+	api.forwardPost(c, "destroy")
+}
+
+func (api *Api) forwardPost(c *gin.Context, endpoint string) {
+	content := make(map[string]string)
+	if err := c.ShouldBind(&content); err != nil {
+		log.Error(err)
+		result := Result{
+			Code:    400,
+			Result:  "Error",
+			Message: err.Error(),
+		}
+		c.JSON(result.Code, result)
+		return
+	}
+	log.Debug(content)
+	data, _ := json.Marshal(content)
+
+	serverAddress := api.Config.FlowServer()
+	request, err := http.NewRequest(
+		http.MethodPost,
+		serverAddress+"/api/v1/"+endpoint,
+		bytes.NewBuffer(data))
+	if err != nil {
+		log.Error(err)
+		result := Result{
+			Code:    500,
+			Result:  "Error",
+			Message: err.Error(),
+		}
+		c.JSON(result.Code, result)
+		return
+	}
+	request.Header.Set("Content-Type", "application/json; charset=utf-8")
+	request.Header.Set("Connection", "close")
+	request.Close = true
+	client := &http.Client{}
+	response, err := client.Do(request)
+	if err != nil {
+		log.Error(err)
+		result := Result{
+			Code:    500,
+			Result:  "Error",
+			Message: err.Error(),
+		}
+		c.JSON(result.Code, result)
+		return
+	}
+	defer response.Body.Close()
+	body, err := ioutil.ReadAll(response.Body)
+	ncontent := Result{}
+	err = json.Unmarshal(body, &ncontent)
+	if err != nil {
+		log.Error(err)
+		result := Result{
+			Code:    500,
+			Result:  "Error",
+			Message: err.Error(),
+		}
+		c.JSON(result.Code, result)
+		return
+	}
+	c.JSON(ncontent.Code, ncontent)
+}
+
+// Get the status of all items in the current pipeline
+func (api *Api) FlowStatus(c *gin.Context) {
+	res := make(map[string]string)
+	res["pipeline"] = c.Params.ByName("pipeline")
+	data, _ := json.Marshal(res)
+
+	serverAddress := api.Config.FlowServer()
+	request, err := http.NewRequest(
+		http.MethodPost,
+		serverAddress+"/api/v1/status",
+		bytes.NewBuffer(data))
+	if err != nil {
+		log.Error(err)
+		result := Result{
+			Code:    500,
+			Result:  "Error",
+			Message: err.Error(),
+		}
+		c.JSON(result.Code, result)
+		return
+	}
+	request.Header.Set("Content-Type", "application/json; charset=utf-8")
+	request.Header.Set("Connection", "close")
+	request.Close = true
+	client := &http.Client{}
+	response, err := client.Do(request)
+	if err != nil {
+		log.Error(err)
+		result := Result{
+			Code:    500,
+			Result:  "Error",
+			Message: err.Error(),
+		}
+		c.JSON(result.Code, result)
+		return
+	}
+	defer response.Body.Close()
+	body, err := ioutil.ReadAll(response.Body)
+	content := Result{}
+	err = json.Unmarshal(body, &content)
+	if err != nil {
+		log.Error(err)
+		result := Result{
+			Code:    500,
+			Result:  "Error",
+			Message: err.Error(),
+		}
+		c.JSON(result.Code, result)
+		return
+	}
+	c.JSON(content.Code, content)
+}
+
+func (api *Api) PopQueue(c *gin.Context) {
+	result := Result{
+		Code:   200,
+		Result: "OK",
+	}
+
+	var (
+		pipelineName string = c.Params.ByName("pipeline")
+		key          string = c.Params.ByName("key")
+	)
+	pipeline, err := pipeline.GetPipeline(api.Config, pipelineName)
+	if err != nil {
+		result.Code = 500
+		result.Result = "Error"
+		result.Message = "Error opening pipeline " + pipelineName + " " + err.Error()
+		c.JSON(result.Code, result)
+		return
+	}
+	log.Debug("Using pipeline ", pipeline)
+
+	var (
+		// key = 'container:version:hostname'
+		// example: 'python:3.19-alpine-3.12:example-pipeline-test-0'
+		keyparts  []string = strings.Split(key, ":")
+		container string   = keyparts[0]
+		version   string   = keyparts[1]
+
+		// takes a cluster object name (example: example-pipeline-test) and strips the pipeline name
+		// leaving just 'test' which should be the container name + ID (test-0, test-adf8bc4)
+		group       string = strings.Trim(strings.TrimPrefix(keyparts[2], pipeline.DnsName), "-")
+		activeKey   string
+		activeIndex int
+	)
+
+	queue := make(map[string]string)
+	// the last element is the pod index/ID
+	if index := strings.LastIndex(group, "-"); index != -1 {
+		group = group[:index]
+	}
+	// rebuild the key
+	key = fmt.Sprintf("%s:%s:%s", container, version, group)
+	if err := api.Db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("queue")).Bucket([]byte(pipeline.BucketName))
+		log.Debug("Scanning for key ", key)
+		c := b.Cursor()
+		for k, v := c.Seek([]byte(key)); k != nil && bytes.HasPrefix(k, []byte(key)); k, v = c.Next() {
+			queue[string(k)] = string(v)
+		}
+		return nil
+	}); err != nil {
+		log.Error(err)
+	}
+	log.Debug(queue)
+
+	// take the first element off the queue and then delete it from the database
+
+	// To prevent a race condition across api calls, we use a mutex lock on a keyslice
+	// this means we can safely handle handing commands out to the pods without
+	// multiple pods recieving the same event
+	api.queueLock.Lock()
+	for activeKey = range queue {
+		var found bool = false
+		for _, check := range api.queueLock.locks {
+			if check == activeKey {
+				found = true
+				break
+			}
+		}
+		if !found && activeKey != "" {
+			api.queueLock.locks = append(api.queueLock.locks, activeKey)
+			break
+		}
+	}
+	api.queueLock.Unlock()
+	if activeKey == "" {
+		result.Code = 202
+		result.Message = ""
+		c.JSON(result.Code, result)
+		return
+	}
+
+	if err := api.Db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("queue")).Bucket([]byte(pipeline.BucketName))
+		if err := b.Delete([]byte(activeKey)); err != nil {
+			return fmt.Errorf("Error deleting key %s - %s", activeKey, err)
+		}
+		return nil
+	}); err != nil {
+		log.Error(err)
+	}
+
+	// update files bucket to store state
+	slice := strings.Split(activeKey, ":")
+	keystr := slice[len(slice)-2] + ":" + slice[len(slice)-1]
+	log.Warn(keystr)
+	if err := api.Db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("files")).Bucket([]byte(pipeline.BucketName))
+		var tag string = container + ":" + version
+		log.Debug("Updating state in files/", pipeline.BucketName, " for container ", tag)
+		value := b.Get([]byte(keystr))
+		body, err := base64.StdEncoding.DecodeString(string(value))
+		content := make(map[string]string)
+		json.Unmarshal(body, &content)
+		content[tag] = "in_progress"
+		body, _ = json.Marshal(content)
+		err = b.Put([]byte(keystr), []byte(base64.StdEncoding.EncodeToString([]byte(body))))
+		if err != nil {
+			return fmt.Errorf("create kv: %s", err)
+		}
+
+		return nil
+	}); err != nil {
+		log.Error(err)
+	}
+
+	// now remove it from the lock
+	if len(api.queueLock.locks) > 0 {
+		locks := api.queueLock.locks
+		var element string
+		for activeIndex, element = range locks {
+			if element == activeKey {
+				break
+			}
+		}
+		api.queueLock.Lock()
+		locks[len(locks)-1], locks[activeIndex] = locks[activeIndex], locks[len(locks)-1]
+		api.queueLock.locks = locks[:len(locks)-1]
+		api.queueLock.Unlock()
+	}
+
+	var id string = queue[activeKey]
+	var str []string = strings.Split(activeKey, ":")
+	log.Debug(str, len(str))
+	if len(str) == 0 {
+		result.Code = 202
+		result.Message = ""
+		c.JSON(result.Code, result)
+		return
+	}
+	// Now build the response
+	message := QueueItem{
+		PipelineFolder: pipeline.BucketName,
+		Filename:       strings.TrimPrefix(strings.Join(str[len(str)-2:], "/"), "root/"),
+		Command:        *pipeline.Commands[id],
+	}
+	result.Message = message
+	c.JSON(result.Code, result.Message)
+}
+
 // Updates the given queue with new event items
 func (api *Api) PerpetualQueue(c *gin.Context) {
 	request := make(map[string]interface{})
@@ -515,7 +820,7 @@ func (api *Api) PerpetualQueue(c *gin.Context) {
 		c.JSON(result.Code, result)
 		return
 	}
-	log.Debug("Got pipeline ", pipeline)
+	log.Debug("Using pipeline ", pipeline)
 
 	if _, ok := api.QueueSize[pipeline.BucketName]; !ok {
 		api.QueueSize[pipeline.BucketName] = maxitems
@@ -594,11 +899,9 @@ func (api *Api) walkFiles(pipeline *pipeline.Pipeline, command *pipeline.Command
 			b := tx.Bucket([]byte("queue")).Bucket([]byte(pipeline.BucketName))
 
 			for k := range available {
-				key := tag + ":" + k
-				com, _ := json.Marshal(command)
-				body := base64.StdEncoding.EncodeToString([]byte(com))
-
-				err := b.Put([]byte(key), []byte(body))
+				// need command container name as second
+				key := tag + ":" + pipeline.GetParent(command).Name + ":" + k
+				err := b.Put([]byte(key), []byte(command.Id))
 				if err != nil {
 					return fmt.Errorf("create kv: %s", err)
 				}
@@ -620,7 +923,7 @@ func (api *Api) walkFiles(pipeline *pipeline.Pipeline, command *pipeline.Command
 				log.Debug("Adding ", command.Id, "to files/", pipeline.BucketName)
 				value := available[v]
 				value[tag] = "queued"
-				com, _ := json.Marshal(command)
+				com, _ := json.Marshal(value)
 				body := base64.StdEncoding.EncodeToString([]byte(com))
 				err := b.Put([]byte(v), []byte(body))
 				if err != nil {
@@ -635,7 +938,11 @@ func (api *Api) walkFiles(pipeline *pipeline.Pipeline, command *pipeline.Command
 	}
 	if *count != 0 {
 		for _, com := range pipeline.GetNext(command) {
-			api.walkFiles(pipeline, com, count)
+			if com != nil { // disconnected link
+				api.walkFiles(pipeline, com, count)
+			} else {
+				log.Debug("Not walking path from ", command.Name, " - Link is disconnected")
+			}
 		}
 	}
 }
