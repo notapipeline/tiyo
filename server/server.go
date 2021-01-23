@@ -83,8 +83,12 @@ func (server *Server) Init() {
 func (server *Server) Run() int {
 	log.Info("starting server.Apidb-browser..")
 
-	var err error
-	server.Api, err = NewApi(server.Dbname, server.Config)
+	var (
+		err error
+		db  string = server.Config.DbDir + "/" + server.Dbname
+	)
+
+	server.Api, err = NewApi(db, server.Config)
 	if err != nil {
 		fmt.Println(err)
 		return 1

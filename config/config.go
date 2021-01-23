@@ -46,13 +46,28 @@ type Config struct {
 	Docker          Docker     `json:"docker"`
 	AppName         string     `json:"appname"`
 	DnsName         string     `json:"dnsName"`
+
+	ConfigBase string
+	DbDir      string
 }
 
 func NewConfig() (*Config, error) {
 	config := Config{
-		DnsName: "example.com",
+		DnsName:    "example.com",
+		ConfigBase: "/etc/tiyo",
+		DbDir:      "/var/tiyo",
 	}
-	jsonFile, err := os.Open("config.json")
+	var (
+		err        error
+		configfile string = "tiyo.json"
+	)
+	_, err = os.Stat(configfile)
+	if os.IsNotExist(err) {
+		configfile = config.ConfigBase + "/" + configfile
+	}
+
+	log.Info("Using config file: ", configfile)
+	jsonFile, err := os.Open(configfile)
 	if err != nil {
 		return nil, err
 	}
@@ -73,6 +88,15 @@ func NewConfig() (*Config, error) {
 
 	if config.Kubernetes.Namespace == "" {
 		config.Kubernetes.Namespace = "default"
+	}
+
+	if config.Kubernetes.ConfigFile == "" {
+		config.Kubernetes.ConfigFile = "config"
+	}
+
+	_, err = os.Stat(config.Kubernetes.ConfigFile)
+	if os.IsNotExist(err) {
+		config.Kubernetes.ConfigFile = config.ConfigBase + "/" + config.Kubernetes.ConfigFile
 	}
 
 	return &config, nil

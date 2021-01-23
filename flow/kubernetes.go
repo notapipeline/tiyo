@@ -737,7 +737,7 @@ func (kube *Kubernetes) ServiceNodePorts(name string) *[]ServicePort {
 				servicePort := ServicePort{}
 				servicePort.Address = addr
 				servicePort.Port = port.NodePort
-				log.Warn("Adding port ", servicePort.Port)
+				log.Debug("Adding port ", servicePort.Port)
 				servicePorts = append(servicePorts, servicePort)
 			}
 		}
