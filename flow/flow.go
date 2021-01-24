@@ -263,6 +263,7 @@ func (flow *Flow) Run() int {
 		err error
 	)
 	log.Info("Starting flow executor")
+
 	sigc := make(chan os.Signal, 1)
 	done := make(chan bool)
 
@@ -280,6 +281,8 @@ func (flow *Flow) Run() int {
 		return 1
 	}
 
+	log.Info("Setting working directory to ", flow.Config.DbDir)
+	os.Chdir(flow.Config.DbDir)
 	// Start server in background
 	go flow.Api.Serve()
 	if flow.Name != "" {

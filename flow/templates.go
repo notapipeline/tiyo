@@ -2,18 +2,24 @@ package flow
 
 import "text/template"
 
-// Arguments: [org/]container, version, pipeline
+// Template string for creating docker containers
 const dockerTemplate string = `FROM %s
 USER root
-RUN useradd -ms /bin/bash -d /tiyo tiyo
+RUN if ! which useradd; then \
+    adduser -S -s /bin/sh -h /tiyo tiyo; \
+  else \
+    useradd -ms /bin/sh -d /tiyo tiyo; \
+  fi
 
 WORKDIR /tiyo
 COPY tiyo /usr/bin/tiyo
-COPY config.json .
 RUN chmod +x /usr/bin/tiyo
+COPY config.json tiyo.json
+RUN chmod 644 tiyo.json
 USER tiyo
 CMD ["/usr/bin/tiyo", "syphon"]`
 
+// Template string for Nginx config files
 var TplNginxConf = template.Must(template.New("").Parse(`
 map $http_upgrade $connection_upgrade {
     default upgrade;

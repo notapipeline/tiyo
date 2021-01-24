@@ -147,6 +147,7 @@ class Pipeline {
                     case 'Running':
                         color = '#0000FF';
                         break;
+                    case 'Busy':
                     case 'Executing':
                         color = '#00FF00';
                         break;
@@ -180,6 +181,8 @@ class Pipeline {
                 Waiting:    0,
                 Running:    0,
                 Terminated: 0,
+                Ready: 0,
+                Busy: 0,
             }
         };
 
@@ -188,6 +191,9 @@ class Pipeline {
             for (var container in pod.containers) {
                 var id = pod.containers[container].id;
                 containers[id][pod.containers[container].state] += 1;
+                if (pod.containers[container].state == 'Ready' || pod.containers[container].state == 'Busy') {
+                    containers[id]["Running"] += 1
+                }
             }
         }
 

@@ -144,11 +144,12 @@ func (server *Server) Run() int {
 	server.Engine.POST("/api/v1/stopflow", server.Api.StopFlow)
 	server.Engine.POST("/api/v1/destroyflow", server.Api.DestroyFlow)
 
+	host := fmt.Sprintf("%s:%d", server.Config.Assemble.Host, server.Config.Assemble.Port)
+	log.Info(host)
 	if server.Config.Assemble.Cacert != "" && server.Config.Assemble.Cakey != "" {
-		err = server.Engine.RunTLS(
-			server.Address+":"+server.Port, server.Config.Assemble.Cacert, server.Config.Assemble.Cakey)
+		err = server.Engine.RunTLS(host, server.Config.Assemble.Cacert, server.Config.Assemble.Cakey)
 	} else {
-		err = server.Engine.Run(server.Address + ":" + server.Port)
+		err = server.Engine.Run(host)
 	}
 
 	if err != nil {

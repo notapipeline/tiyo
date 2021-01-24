@@ -47,7 +47,10 @@ func (fill *Fill) fill() {
 
 	for i := 0; i < len(matchers); i++ {
 		channels[i] = make(chan notify.EventInfo, 1)
-		var path = filepath.Join(fill.Config.SequenceBaseDir, fill.Pipeline.BucketName, matchers[i].Source)
+		var path = filepath.Join(
+			fill.Config.SequenceBaseDir, fill.Config.Kubernetes.Volume,
+			fill.Pipeline.BucketName, matchers[i].Source)
+
 		log.Info("Creating channel for ", path)
 		os.MkdirAll(path, os.ModePerm)
 

@@ -261,7 +261,7 @@ func (pipeline *Pipeline) linkSources(links []*LinkInterface) []Matcher {
 	}
 
 	for _, link := range links {
-		if (*link).GetLink().Type == "file" /* && (*link).(*PathLink).Watch */ {
+		if (*link).GetLink().Type == "file" {
 			match := Matcher{}
 			var path string = (*link).(*PathLink).Path
 			if path == "" || (*link).(*PathLink).Path == pipeline.BucketName {
@@ -270,6 +270,12 @@ func (pipeline *Pipeline) linkSources(links []*LinkInterface) []Matcher {
 					path = pipeline.Commands[sourceId].Name
 				} else if _, ok := pipeline.Sources[sourceId]; ok {
 					path = pipeline.Sources[sourceId].Name
+				}
+				if path == pipeline.BucketName {
+					// empty path if we match bucket name
+					// as this will set it to the pipeline
+					// root directory.
+					path = ""
 				}
 			}
 			log.Debug("Found path ", path, (*link))

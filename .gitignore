@@ -27,3 +27,4 @@ _testmain.go
 config.json
 tiyo.json
 containers
+server/assets.go
