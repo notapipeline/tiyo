@@ -5,10 +5,19 @@ import "text/template"
 // Template string for creating docker containers
 const dockerTemplate string = `FROM %s
 USER root
-RUN if ! which useradd; then \
-    adduser -S -s /bin/sh -h /tiyo tiyo; \
+
+RUN if getent passwd | grep -q 1000; then \
+  if ! which userdel; then \
+    deluser $(getent passwd | grep 1000 | awk -F: '{print $1}'); \
   else \
-    useradd -ms /bin/sh -d /tiyo tiyo; \
+    userdel $(getent passwd | grep 1000 | awk -F: '{print $1}'); \
+  fi ; \
+fi
+
+RUN if ! which useradd; then \
+    adduser -S -s /bin/sh --uid 1000 -h /tiyo tiyo; \
+  else \
+    useradd -ms /bin/sh -u 1000 -d /tiyo tiyo; \
   fi
 
 WORKDIR /tiyo

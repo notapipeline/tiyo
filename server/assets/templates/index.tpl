@@ -152,15 +152,15 @@
             </div>
         </section>
 
-        <section class="uk-position-medium uk-position-top-left" id="scan">
-            <h3 class="pagetitle">contents</h3>
-            <div class="uk-vertical-align uk-text-center uk-width-xlarge">
-                <div class="uk-vertical-align-middle uk-grid" id="d">
+        <section class="uk-position-medium uk-position-top-left uk-width-1-2" id="scan">
+            <h3 class="pagetitle">Contents</h3>
+            <div class="uk-vertical-align uk-text-center uk-width-1-1">
+                <div class="uk-vertical-align-middle uk-grid uk-width-3-4" id="d">
                     <div class="uk-width-1-3"><input class="uk-form-small" type="text" id="pbucket" placeholder="Bucket name"></div>
                     <div class="uk-width-1-3"><input class="uk-form-small" type="text" id="pkey" placeholder="Key Prefix"></div>
                     <div class="uk-width-1-3"><a class="uk-width-1-1 uk-button uk-button-primary uk-button-small" onclick="scan()">List</a></div>
                 </div>
-                <div class="uk-vertical-align-middle" id="pfs"></div>
+                <div class="uk-vertical-align-middle uk-margin-top" id="pfs"></div>
             </div>
         </section>
         </article>
@@ -296,13 +296,16 @@
 
 <!-- Key list -->
 <script id="exploretpl" type="x-tmpl-mustache">
-<h3 style="margin-top: 30px;">Buckets</h3>
-<ul>
-{{#buckets}}
+{{#if buckets.length}}
+  <h3 style="margin-top: 30px;">Buckets<span style="float:right">{{bucketlen}} items</span></h3>
+  <ul>
+    {{#buckets}}
     <li style="text-align: left;"><a onclick="scan('{{.}}')">{{.}}</a></li>
-{{/buckets}}
-</ul>
-<h3>Keys</h3>
+    {{/buckets}}
+  </ul>
+{{/if}}
+{{#if keylen}}
+<h3>Keys<span style="float:right">{{keylen}} items</span></h3>
 <table class="uk-table" id="{{id}}">
     <thead>
         <tr>
@@ -321,6 +324,7 @@
    {{/each}}
     </tbody>
 </table>
+{{/if}}
 </script>
 
 <!-- Page load scripts -->

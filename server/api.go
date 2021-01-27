@@ -27,6 +27,7 @@ type GithubResponse struct {
 
 type QueueItem struct {
 	PipelineFolder string           `json:"pipelineFolder"`
+	SubFolder      string           `json:"subFolder"`
 	Filename       string           `json:"filename"`
 	Event          string           `json:"event"`
 	Command        pipeline.Command `json:"command"`
@@ -39,8 +40,10 @@ type Result struct {
 }
 
 type ScanResult struct {
-	Buckets []string          `json:"buckets"`
-	Keys    map[string]string `json:"keys"`
+	Buckets       []string          `json:"buckets"`
+	BucketsLength int               `json:"bucketlen"`
+	Keys          map[string]string `json:"keys"`
+	KeyLen        int               `json:"keylen"`
 }
 
 type Lock struct {
@@ -398,46 +401,47 @@ func (api *Api) PrefixScan(c *gin.Context) {
 		c.JSON(result.Code, result)
 		return
 	}
-	if request["key"] == "" {
-		request["key"] = request["child"]
-		delete(request, "child")
-	}
-	if request["child"] == "" {
-		delete(request, "child")
-	}
 
 	scanResults := ScanResult{}
 	scanResults.Buckets = make([]string, 0)
+	scanResults.BucketsLength = 0
 	scanResults.Keys = make(map[string]string)
+	scanResults.KeyLen = 0
 
 	if err := api.Db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(request["bucket"]))
+
+		var key string = ""
 		if child, ok := request["child"]; ok {
 			b = b.Bucket([]byte(child))
-		} else if request["key"] != "" && b.Get([]byte(request["key"])) == nil {
-			b = b.Bucket([]byte(request["key"]))
+			if _, ok = request["key"]; ok {
+				key = request["key"]
+			}
 		}
-
 		if b == nil {
-			return nil
+			return fmt.Errorf("No such bucket or bucket is invalid")
 		}
 		c := b.Cursor()
 
-		if key, ok := request["child"]; ok {
+		if key != "" {
 			prefix := []byte(key)
 			for k, v := c.Seek(prefix); k != nil && bytes.HasPrefix(k, prefix); k, v = c.Next() {
 				if v == nil {
 					scanResults.Buckets = append(scanResults.Buckets, string(k))
+					scanResults.BucketsLength++
 				} else {
 					scanResults.Keys[string(k)] = string(v)
+					scanResults.KeyLen++
 				}
 			}
 		} else {
 			for k, v := c.First(); k != nil; k, v = c.Next() {
 				if v == nil {
 					scanResults.Buckets = append(scanResults.Buckets, string(k))
+					scanResults.BucketsLength++
 				} else {
 					scanResults.Keys[string(k)] = string(v)
+					scanResults.KeyLen++
 				}
 			}
 		}
@@ -776,11 +780,14 @@ func (api *Api) PopQueue(c *gin.Context) {
 		c.JSON(result.Code, result)
 		return
 	}
+
 	// Now build the response
 	message := QueueItem{
 		PipelineFolder: pipeline.BucketName,
-		Filename:       strings.TrimPrefix(strings.Join(str[len(str)-2:], "/"), "root/"),
-		Command:        *pipeline.Commands[id],
+		// get subfolder or "" if subfolder is root
+		SubFolder: strings.TrimPrefix(str[len(str)-2], "root"),
+		Filename:  str[len(str)-1],
+		Command:   *pipeline.Commands[id],
 	}
 	result.Message = message
 	c.JSON(result.Code, result.Message)

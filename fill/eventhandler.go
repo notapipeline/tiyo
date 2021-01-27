@@ -137,9 +137,8 @@ func NewFiller(config *config.Config) *Filler {
 	return &filler
 }
 
-func (filler *Filler) Add(bucket string, path string, notification notify.Event) {
-	filename := filepath.Base(path)
-	dirname := filepath.Base(filepath.Dir(path))
+func (filler *Filler) Add(bucket string, dirname string, filename string, notification notify.Event) {
+	var path string = filepath.Join(dirname, filename)
 	if dirname == bucket {
 		filename = "root:" + filename
 	} else {

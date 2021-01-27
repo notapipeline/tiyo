@@ -14,6 +14,10 @@ type FlowApi struct {
 	Bound bool
 }
 
+type FlowApiInstances struct {
+	api map[string]Flow
+}
+
 func NewFlowApi(flow *Flow) *FlowApi {
 	api := FlowApi{
 		Flow:  flow,
@@ -70,9 +74,8 @@ func (flowApi *FlowApi) Register(c *gin.Context) {
 	flowApi.Flow.Queue.Register(c)
 }
 
-func (flowApi *FlowApi) pipelineFromContext(c *gin.Context) bool {
-	if flowApi.Bound {
-		// already bound
+func (flowApi *FlowApi) pipelineFromContext(c *gin.Context, rebind bool) bool {
+	if flowApi.Bound && !rebind {
 		return true
 	}
 
@@ -88,7 +91,6 @@ func (flowApi *FlowApi) pipelineFromContext(c *gin.Context) bool {
 		return false
 	}
 	log.Debug(content)
-	flowApi.Bound = true
 
 	if _, ok := content["pipeline"]; !ok {
 		log.Error("Pipeline name is required")
@@ -110,11 +112,12 @@ func (flowApi *FlowApi) pipelineFromContext(c *gin.Context) bool {
 			return false
 		}
 	}
+	flowApi.Bound = true
 	return true
 }
 
 func (flowApi *FlowApi) Destroy(c *gin.Context) {
-	if ok := flowApi.pipelineFromContext(c); !ok {
+	if ok := flowApi.pipelineFromContext(c, true); !ok {
 		log.Error("Not executing pipeline - failed")
 		return
 	}
@@ -131,7 +134,7 @@ func (flowApi *FlowApi) Destroy(c *gin.Context) {
 }
 
 func (flowApi *FlowApi) Stop(c *gin.Context) {
-	if ok := flowApi.pipelineFromContext(c); !ok {
+	if ok := flowApi.pipelineFromContext(c, true); !ok {
 		log.Error("Not executing pipeline - failed")
 		return
 	}
@@ -147,7 +150,7 @@ func (flowApi *FlowApi) Stop(c *gin.Context) {
 }
 
 func (flowApi *FlowApi) Start(c *gin.Context) {
-	if ok := flowApi.pipelineFromContext(c); !ok {
+	if ok := flowApi.pipelineFromContext(c, true); !ok {
 		log.Error("Not executing pipeline - failed")
 		return
 	}
@@ -163,7 +166,7 @@ func (flowApi *FlowApi) Start(c *gin.Context) {
 }
 
 func (flowApi *FlowApi) Execute(c *gin.Context) {
-	if ok := flowApi.pipelineFromContext(c); !ok {
+	if ok := flowApi.pipelineFromContext(c, true); !ok {
 		log.Error("Not executing pipeline - failed")
 		return
 	}
@@ -172,12 +175,16 @@ func (flowApi *FlowApi) Execute(c *gin.Context) {
 		// Execute runs in goroutine to avoid blocking server
 		go flowApi.Flow.Execute()
 	}
-	flowApi.Status(c)
+	flowApi.checkStatus(c, false)
 }
 
 // Get the status of the executing pipeline
 func (flowApi *FlowApi) Status(c *gin.Context) {
-	if ok := flowApi.pipelineFromContext(c); !ok {
+	flowApi.checkStatus(c, true)
+}
+
+func (flowApi *FlowApi) checkStatus(c *gin.Context, rebind bool) {
+	if ok := flowApi.pipelineFromContext(c, rebind); !ok {
 		log.Error("Not sending pipeline status - failed")
 		return
 	}

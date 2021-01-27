@@ -3,34 +3,40 @@ package syphon
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/choclab-net/tiyo/config"
+	"github.com/choclab-net/tiyo/pipeline"
 	"github.com/choclab-net/tiyo/server"
 	log "github.com/sirupsen/logrus"
 )
 
+// Syphon is the command executor embedded inside docker containers
 type Syphon struct {
-	Config   *config.Config
+	config   *config.Config
 	client   *http.Client
 	server   string
 	hostname string
+	self     string
 }
 
+// Create a new syphon executor
 func NewSyphon() *Syphon {
 	syphon := Syphon{}
 	var err error
-	syphon.Config, err = config.NewConfig()
+	syphon.config, err = config.NewConfig()
 	if err != nil {
 		log.Panic(err)
 	}
 	syphon.client = &http.Client{}
-
-	syphon.server = syphon.Config.FlowServer()
+	syphon.server = syphon.config.FlowServer()
 	hostname, err := os.Hostname()
 	if err != nil {
 		log.Fatal("Cannot obtain hostname from system ", err)
@@ -40,6 +46,9 @@ func NewSyphon() *Syphon {
 	if hostname == "meteor.choclab.net" {
 		syphon.hostname = "example-pipeline-test-0"
 	}
+
+	var nameSlice []string = strings.Split(syphon.config.AppName, ":")
+	syphon.self = strings.Trim(nameSlice[0], "-tiyo")
 	return &syphon
 }
 
@@ -50,7 +59,7 @@ func NewSyphon() *Syphon {
 func (syphon *Syphon) register(status string) *server.QueueItem {
 	content := make(map[string]string)
 	content["pod"] = syphon.hostname
-	content["container"] = syphon.Config.AppName
+	content["container"] = syphon.config.AppName
 	content["status"] = status
 	data, _ := json.Marshal(content)
 
@@ -73,18 +82,25 @@ func (syphon *Syphon) register(status string) *server.QueueItem {
 		return nil
 	}
 
+	log.Info("Recieved response with status code ", response.StatusCode, " for status ", status)
 	var message string = ""
 	if response.StatusCode == http.StatusAccepted || response.StatusCode == http.StatusNoContent {
 		// Flow has accepted our update but has no command to return
 		message = "No command returned. Sleeping for 10 seconds before checking again"
+		if status == "Busy" {
+			// dont log if we're only updating status
+			message = ""
+		}
 	} else if response.StatusCode == 404 {
 		// The queue has not been loaded
 		message = "No queue or no queue active - sleeping for 10 seconds before checking again"
 	}
 
-	if message != "" {
-		log.Info(message)
+	if message != "" || status == "Busy" {
 		response.Body.Close()
+		if message != "" {
+			log.Info(message)
+		}
 		return nil
 	}
 
@@ -96,7 +112,6 @@ func (syphon *Syphon) register(status string) *server.QueueItem {
 		return nil
 	}
 
-	log.Debug(string(body))
 	command := server.QueueItem{}
 	result := server.Result{
 		Message: &command,
@@ -109,18 +124,46 @@ func (syphon *Syphon) register(status string) *server.QueueItem {
 	return &command
 }
 
+func (syphon *Syphon) requeue(queueItem *server.QueueItem) {}
+
+func (syphon *Syphon) log(code int, command *pipeline.Command) {}
+
 func (syphon *Syphon) execute(queueItem *server.QueueItem) {
-	command := queueItem.Command
-	log.Debug("Recieved filename ", queueItem.Filename, " with command ", command)
-	command.Execute(queueItem.PipelineFolder, queueItem.Filename, queueItem.Event)
+	command := &queueItem.Command
+	var baseDir string = filepath.Join(syphon.config.SequenceBaseDir, queueItem.PipelineFolder, queueItem.SubFolder)
+	log.Info("Recieved filename ", filepath.Join(baseDir, queueItem.Filename), " with command ", command)
+
+	var exitCode int
+	if exitCode = command.Execute(baseDir, syphon.self, queueItem.Filename, queueItem.Event); exitCode != 0 {
+		// if exitcode is not 0, add the command back to the queue
+		// requeue should send logs back with the command
+		syphon.requeue(queueItem)
+	} else {
+		// write command logs back to the log bucket
+		syphon.log(exitCode, command)
+	}
+
+	// if no end-time, command timed out.
+	if command.EndTime != 0 {
+		h, m, s := time.Unix(0, command.EndTime-command.StartTime).Clock()
+		log.Info(fmt.Sprintf("Command completed in %d:%d:%d", h, m, s))
+	}
 }
 
 // Syphon will not have an initialiser.
 func (syphon *Syphon) Init() {}
 
 // Run the syphon command executor
+//
+// This is the main entry point for the syphon command and is executed
+// from command.Command package.
+//
+// When triggered, syphon will register against the flow server once every
+// 10 seconds. If the registration returns a command, syphon will then
+// register itself as busy, execute the returned command and return the
+// output of the command back to the flow server on completion.
 func (syphon *Syphon) Run() int {
-	log.Info("Starting tiyo syphon")
+	log.Info("Starting tiyo syphon - ", syphon.self)
 	sigc := make(chan os.Signal, 1)
 	done := make(chan bool)
 	signal.Notify(sigc, os.Interrupt)
@@ -133,8 +176,9 @@ func (syphon *Syphon) Run() int {
 
 	go func() {
 		for {
-			log.Info("Polling ", syphon.Config.Flow.Host, ":", syphon.Config.Flow.Port)
+			log.Info("Polling ", syphon.config.Flow.Host, ":", syphon.config.Flow.Port)
 			if command := syphon.register("Ready"); command != nil {
+				log.Info("Registering busy and executing command")
 				syphon.register("Busy")
 				syphon.execute(command)
 			}

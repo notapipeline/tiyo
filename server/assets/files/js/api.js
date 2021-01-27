@@ -70,7 +70,7 @@ function get(bucket, key)
 
 function createBucket(redirect=true)
 {
-    if (router._lastRouteResolved.url == "/scan") {
+    if (router.lastResolved()[0].url == "/scan") {
         createChild(Cookies.get('bucket'), $('#bucket').val());
         return;
     }
@@ -177,7 +177,13 @@ function scan(v) {
     }
 
     $.get(url, function(data) {
-        var html    = template({id: "explore-"+$('#pbucket').val(), buckets: data.message.buckets, keys: data.message.keys});
+        var html    = template({
+            id: "explore-"+$('#pbucket').val(),
+            buckets: data.message.buckets,
+            keys: data.message.keys,
+            bucketlen: data.message.bucketlen,
+            keylen: data.message.keylen
+        });
         $('#pfs').html(html);
         waitForEl('td.editable', editableElements);
     });

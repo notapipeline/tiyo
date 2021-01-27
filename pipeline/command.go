@@ -19,29 +19,30 @@ import (
 const DEFAULT_TIMEOUT = 15
 
 type Command struct {
-	Id            string
-	Parent        string
-	Name          string
-	Command       string
-	Args          string
-	Version       string
-	Language      string
-	Script        bool
-	ScriptContent string
-	Custom        bool
-	Scale         int
-	Timeout       int
-	UseExisting   bool
+	Id            string `json:"id"`
+	Parent        string `json:"parent"`
+	Name          string `json:"name"`
+	Command       string `json:"command"`
+	Args          string `json:"args"`
+	Version       string `json:"version"`
+	Language      string `json:"element"`
+	Script        bool   `json:"script"`
+	ScriptContent string `json:"scriptcontent"`
+	Custom        bool   `json:"custom"`
+	Timeout       int    `json:"timeout"`
+	UseExisting   bool   `json:"existing"`
+	ExposePort    int    `json:"exposeport"`
+	IsUdp         bool   `json:"isudp"`
+	StartTime     int64  `json:""`
+	EndTime       int64  `json:""`
+
 	Image         string
 	Tag           string
-	ExposePort    int
-	IsUdp         bool
-
-	Stdout    bytes.Buffer
-	Stderr    bytes.Buffer
-	ProcessId int
-	StartTime int64
-	EndTime   int64
+	Stdout        bytes.Buffer
+	Stderr        bytes.Buffer
+	ProcessId     int
+	ProcessArgs   []string
+	FileSeperator string
 }
 
 var regex *regexp.Regexp
@@ -65,11 +66,12 @@ func NewCommand(cell map[string]interface{}) *Command {
 		Script:        false,
 		ScriptContent: "",
 		Custom:        false,
-		Scale:         0,
-		Timeout:       900,
+		Timeout:       DEFAULT_TIMEOUT,
 		UseExisting:   false,
 		ExposePort:    -1,
 		IsUdp:         false,
+		StartTime:     0,
+		EndTime:       0,
 	}
 
 	if cell["id"] != nil {
@@ -88,8 +90,8 @@ func NewCommand(cell map[string]interface{}) *Command {
 		command.Command = cell["command"].(string)
 	}
 
-	if cell["args"] != nil {
-		command.Args = cell["args"].(string)
+	if cell["arguments"] != nil {
+		command.Args = cell["arguments"].(string)
 	}
 
 	if cell["version"] != nil {
@@ -104,8 +106,24 @@ func NewCommand(cell map[string]interface{}) *Command {
 		command.Script = cell["script"].(bool)
 	}
 
+	if cell["scriptcontent"] != nil {
+		command.ScriptContent = cell["scriptcontent"].(string)
+	}
+
+	if cell["custom"] != nil {
+		command.Custom = cell["custom"].(bool)
+	}
+
 	if cell["timeout"] != nil {
-		command.Timeout = int(cell["timeout"].(float64)) * 60
+		command.Timeout = int(cell["timeout"].(float64))
+		if command.Timeout == 0 {
+			command.Timeout = DEFAULT_TIMEOUT
+		}
+		if command.Timeout != -1 {
+			command.Timeout = command.Timeout * 60
+		}
+	} else {
+		command.Timeout = DEFAULT_TIMEOUT * 60
 	}
 
 	if cell["existing"] != nil {
@@ -118,19 +136,6 @@ func NewCommand(cell map[string]interface{}) *Command {
 
 	if cell["isudp"] != nil {
 		command.IsUdp = cell["isudp"].(bool)
-	}
-
-	if cell["scriptcontent"] != nil {
-		var script []byte
-		var err error
-		if script, err = base64.StdEncoding.DecodeString(cell["scriptcontent"].(string)); err != nil {
-			command.ScriptContent = ""
-		}
-		command.ScriptContent = string(script)
-	}
-
-	if cell["custom"] != nil {
-		command.Custom = cell["custom"].(bool)
 	}
 
 	return &command
@@ -176,33 +181,96 @@ func (command *Command) GenerateRandomString() string {
 	return string(b)
 }
 
-func (command *Command) WriteScript() (string, error) {
+func (command *Command) writeScript() (string, error) {
 	var name string = command.GenerateRandomString()
 	name = fmt.Sprintf("/tmp/%s-%s", command.Name, name)
+	var (
+		content string
+		script  []byte
+		err     error
+	)
+	if script, err = base64.StdEncoding.DecodeString(command.ScriptContent); err != nil {
+		return "", err
+	}
+	content = string(script)
 
 	file, err := os.Create(name)
 	if err != nil {
 		return "", fmt.Errorf("Failed to create temporary file for %s. %s", name, err)
 	}
 	defer file.Close()
-	if _, err := file.WriteString(command.ScriptContent); err != nil {
+	if _, err := file.WriteString(content); err != nil {
 		return "", fmt.Errorf("Failed to write script contents for %s. Error was: %s", name, err)
 	}
 	file.Sync()
 	return name, nil
 }
 
-func (command *Command) Execute(directory string, filename string, event string) int {
-	if command.Timeout == 0 {
-		command.Timeout = DEFAULT_TIMEOUT
+func (command *Command) Execute(directory string, subdir string, filename string, event string) int {
+	log.Info("Using environment:")
+	for _, value := range os.Environ() {
+		log.Info("    - ", value)
 	}
 
-	command.writeScript()
-	command.collectFiles(directory, filename)
+	var (
+		name string
+		err  error
+	)
+	command.ProcessArgs = make([]string, 0)
+	if command.ScriptContent != "" {
+		name, err = command.writeScript()
+		if err != nil {
+			log.Error(err)
+			return 1
+		}
+	}
+	if name != "" {
+		command.ProcessArgs = append(command.ProcessArgs, name)
+	}
 
-	cmd := exec.Command(command.Command, command.Args)
-	cmd.Stdout = io.MultiWriter(os.Stdout, &command.Stdout)
-	cmd.Stderr = io.MultiWriter(os.Stderr, &command.Stderr)
+	// For certain commands, there needs to be an element of control over
+	// how files are separated
+	for _, item := range strings.Split(command.Args, " ") {
+		log.Info("Appending argument ", item)
+		switch item {
+		case "--tiyo-csi":
+			command.FileSeperator = ","
+			break
+		case "--tiyo-cssi":
+			command.FileSeperator = ", "
+			break
+		case "--tiyo-scssi":
+			command.FileSeperator = " , "
+			break
+		case "--tiyo-flag-f":
+			command.FileSeperator = "-f"
+			break
+		default:
+			command.ProcessArgs = append(command.ProcessArgs, item)
+			break
+		}
+	}
+
+	info, _ := os.Stat(directory)
+	if info != nil {
+		command.collectFiles(directory, filename)
+		directory = filepath.Join(directory, subdir)
+		if _, err := os.Stat(directory); err != nil {
+			_ = os.Mkdir(directory, 0755)
+		}
+		log.Info("Setting working directory to ", directory)
+		os.Chdir(directory)
+	}
+
+	log.Info("Triggering command ", command.Command, " ", command.ProcessArgs)
+	cmd := exec.Command(command.Command, command.ProcessArgs...)
+	cmd.Env = os.Environ()
+
+	// dont collect logs on forever run
+	if command.Timeout != -1 {
+		cmd.Stdout = io.MultiWriter(os.Stdout, &command.Stdout)
+		cmd.Stderr = io.MultiWriter(os.Stderr, &command.Stderr)
+	}
 	command.StartTime = time.Now().UnixNano()
 
 	done := make(chan error)
@@ -214,33 +282,46 @@ func (command *Command) Execute(directory string, filename string, event string)
 	}
 
 	if command.Timeout == -1 {
-		// run forever - does not obtain dir/filename/event
 		return command.ExecuteForever(cmd, done)
 	}
 
 	return command.ExecuteWithTimeout(cmd, done)
 }
 
-func (command *Command) writeScript() {
-	if command.ScriptContent != "" {
-		name, err := command.WriteScript()
-		if err != nil {
-			fmt.Printf("%s", err)
-		}
-		command.Args += fmt.Sprintf(" %s", name)
-	}
-}
-
 func (command *Command) collectFiles(directory string, filename string) {
-	files, err := filepath.Glob(filepath.Join(directory, ".*"+filename+".*"))
-	if err != nil {
-		// nothing to do, nothing to add
-		log.Error(err)
+	if command.Timeout == -1 {
+		log.Info("Not collecting files for forever run")
 		return
 	}
 
-	for _, f := range files {
-		command.Args += " " + f
+	var glob string = filepath.Join(directory, "*"+filename+"*")
+	files, err := filepath.Glob(glob)
+	if err != nil {
+		log.Error(err)
+		return
+	}
+	log.Info("Found ", len(files), " for fileglob ", glob)
+
+	var csifiles string = ""
+	for index, file := range files {
+		if command.FileSeperator == "," {
+			csifiles = csifiles + ","
+			continue
+		} else if command.FileSeperator == ", " {
+			if index < len(files)-1 {
+				file = file + ","
+			}
+		} else if command.FileSeperator == " , " {
+			if index < len(files)-1 {
+				file = file + " ,"
+			}
+		} else if command.FileSeperator == "-f" {
+			command.ProcessArgs = append(command.ProcessArgs, "-f")
+		}
+		command.ProcessArgs = append(command.ProcessArgs, file)
+	}
+	if csifiles != "" {
+		command.ProcessArgs = append(command.ProcessArgs, strings.Trim(csifiles, ","))
 	}
 }
 
@@ -278,8 +359,8 @@ func (command *Command) ExecuteWithTimeout(cmd *exec.Cmd, done chan error) int {
 			command.EndTime = time.Now().UnixNano()
 			return exitError.ExitCode()
 		}
-	case <-time.After(time.Duration(command.Timeout) * time.Minute):
-		log.Warn("Command ", command.Name, " exited due to timeout - ", command.Timeout, " minutes exceeded")
+	case <-time.After(time.Duration(command.Timeout) * time.Second):
+		log.Error("Command ", command.Name, " exited due to timeout - ", command.Timeout, " seconds exceeded")
 		return 1
 	}
 

@@ -555,18 +555,6 @@ func (kube *Kubernetes) IsExistingResource(name string) bool {
 	return kube.DeploymentExists(name) || kube.StatefulSetExists(name) || kube.DaemonSetExists(name)
 }
 
-func (kube *Kubernetes) GetMaxReplicas(instances []*pipeline.Command) *int32 {
-	// set at 30 but should be ((nodes/max_containers_in_pipeline) - persistant_containers) / (CPU|RAM|CAPACITY)
-	// instance.Scale must always be less than this number - if not, it gets truncated.
-	var scale int32 = int32(30)
-	for _, instance := range instances {
-		if int32(instance.Scale) > scale {
-			scale = int32(instance.Scale)
-		}
-	}
-	return &scale
-}
-
 func (kube *Kubernetes) GetVolumeMountForNamespace(namespace string) []corev1.VolumeMount {
 	mounts := make([]corev1.VolumeMount, 0)
 	mount := corev1.VolumeMount{

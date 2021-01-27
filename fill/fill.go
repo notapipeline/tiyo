@@ -75,12 +75,15 @@ func (fill *Fill) fill() {
 						return
 					}
 				}
-				var filename string = filepath.Base(eventInfo.Path())
+				var (
+					filename string = filepath.Base(eventInfo.Path())
+					dirname  string = filepath.Base(filepath.Dir(eventInfo.Path()))
+				)
 				matches := match.FindStringSubmatch(filename)
 				if len(matches) > 1 {
 					filename = matches[1] // should be widest possible grouping match
 				}
-				fill.Filler.Add(fill.Pipeline.BucketName, eventInfo.Path(), eventInfo.Event())
+				fill.Filler.Add(fill.Pipeline.BucketName, dirname, filename, eventInfo.Event())
 			}
 		}(path, matchers[i].Pattern, channels[i])
 	}
