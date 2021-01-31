@@ -356,9 +356,9 @@ func (pipeline *Pipeline) CommandFromImageName(image string) *Command {
 func GetPipeline(config *config.Config, name string) (*Pipeline, error) {
 	pipeline := Pipeline{}
 	pipeline.Name = name
-	pipeline.DnsName = sanitize(name, "-")
+	pipeline.DnsName = Sanitize(name, "-")
 	pipeline.Fqdn = pipeline.DnsName + "." + config.DnsName
-	pipeline.BucketName = sanitize(name, "_")
+	pipeline.BucketName = Sanitize(name, "_")
 	pipeline.Commands = make(map[string]*Command)
 	pipeline.Links = make(map[string]*LinkInterface)
 	pipeline.Containers = make(map[string]*Container)
@@ -366,7 +366,7 @@ func GetPipeline(config *config.Config, name string) (*Pipeline, error) {
 	pipeline.Config = config
 
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: config.UseInsecureTLS}
-	// Do not use pipeline.Name here - that has been sanitized and will not match
+	// Do not use pipeline.Name here - that has been Sanitized and will not match
 	response, err := http.Get(fmt.Sprintf("%s/api/v1/bucket/pipeline/%s", config.AssembleServer(), name))
 	if err != nil {
 		return nil, err

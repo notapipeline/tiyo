@@ -17,6 +17,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkv1 "k8s.io/api/networking/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
@@ -165,7 +166,10 @@ func (kube *Kubernetes) getStateFromDb(podname string, image string) string {
 		log.Error(err)
 		return state
 	}
-	request.Header.Set("Accept", "application/vnd.github.v3+json")
+	request.Header.Set("Content-Type", "application/json; charset=utf-8")
+	request.Header.Set("Accept", "application/json")
+	request.Header.Set("Connection", "close")
+	request.Close = true
 	client := &http.Client{}
 	response, err := client.Do(request)
 	if err != nil {
@@ -238,6 +242,13 @@ func (kube *Kubernetes) GetStatefulSetContainers(instances []*pipeline.Command) 
 			ImagePullPolicy: corev1.PullAlways,
 			Ports:           kube.GetContainerPorts(instance),
 			VolumeMounts:    kube.GetVolumeMountForNamespace(kube.Config.Kubernetes.Namespace),
+			Resources: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					// hard coded for the moment but should come from form
+					"cpu":    resource.MustParse(instance.Cpu),
+					"memory": resource.MustParse(instance.Memory),
+				},
+			},
 		}
 		containers = append(containers, container)
 	}
@@ -270,20 +281,17 @@ func (kube *Kubernetes) DestroyStatefulSet(pipeline string, container *pipeline.
 }
 
 func (kube *Kubernetes) CreateStatefulSet(pipeline string, container *pipeline.Container) {
-	var (
-		name             = container.Name
-		stateName string = pipeline + "-" + container.Name
-	)
+	var name string = pipeline + "-" + container.Name
 	client := kube.ClientSet.AppsV1().StatefulSets(kube.Config.Kubernetes.Namespace)
 	instances := container.GetChildren()
 
-	log.Info("Creating stateful set ", stateName)
+	log.Info("Creating stateful set ", name)
 	statefulset := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      stateName,
+			Name:      name,
 			Namespace: kube.Config.Kubernetes.Namespace,
 			Labels: map[string]string{
-				"k8s-app": stateName,
+				"app": pipeline,
 			},
 		},
 		Spec: appsv1.StatefulSetSpec{
@@ -293,7 +301,7 @@ func (kube *Kubernetes) CreateStatefulSet(pipeline string, container *pipeline.C
 					"app": name,
 				},
 			},
-			ServiceName: kube.CreateService(stateName, name, instances),
+			ServiceName: kube.CreateService(name, instances),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
@@ -318,7 +326,7 @@ func (kube *Kubernetes) CreateStatefulSet(pipeline string, container *pipeline.C
 	}
 
 	// If the stateful set exists, delete and recreate it.
-	if kube.StatefulSetExists(stateName) {
+	if kube.StatefulSetExists(name) {
 		container.State = "Terminating"
 		kube.DestroyStatefulSet(pipeline, container)
 	}
@@ -380,39 +388,30 @@ func (kube *Kubernetes) DestroyDaemonSet(pipeline string, container *pipeline.Co
 }
 
 func (kube *Kubernetes) CreateDaemonSet(pipeline string, container *pipeline.Container) {
-	var (
-		name       string = container.Name
-		daemonName string = pipeline + "-" + container.Name
-	)
+	var name string = pipeline + "-" + container.Name
 	client := kube.ClientSet.AppsV1().DaemonSets(kube.Config.Kubernetes.Namespace)
 
 	daemonset := &appsv1.DaemonSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      daemonName,
+			Name:      name,
 			Namespace: kube.Config.Kubernetes.Namespace,
 			Labels: map[string]string{
-				"k8s-app": daemonName,
+				"app": pipeline,
 			},
 		},
 		Spec: appsv1.DaemonSetSpec{
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"name": name,
+					"app": name,
 				},
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
-						"name": name,
+						"app": name,
 					},
 				},
 				Spec: corev1.PodSpec{
-					Tolerations: []corev1.Toleration{
-						{
-							Key:    "node-role.kubernetes.io/master",
-							Effect: "NoSchedule",
-						},
-					},
 					Containers: kube.GetStatefulSetContainers(container.GetChildren()),
 					Volumes: []corev1.Volume{
 						{
@@ -430,7 +429,7 @@ func (kube *Kubernetes) CreateDaemonSet(pipeline string, container *pipeline.Con
 	}
 
 	// If the daemonset exists, delete and recreate it.
-	if kube.DaemonSetExists(daemonName) {
+	if kube.DaemonSetExists(name) {
 		container.State = "Terminating"
 		kube.DestroyDaemonSet(pipeline, container)
 	}
@@ -505,15 +504,18 @@ func (kube *Kubernetes) DestroyDeployment(pipeline string, container *pipeline.C
 }
 
 func (kube *Kubernetes) CreateDeployment(pipeline string, container *pipeline.Container) {
-	var name string = container.Name
-	var depName string = pipeline + "-" + container.Name
+	var name string = pipeline + "-" + container.Name
 	instances := container.GetChildren()
 
 	client := kube.ClientSet.AppsV1().Deployments(kube.Config.Kubernetes.Namespace)
 
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: depName,
+			Name:      name,
+			Namespace: kube.Config.Kubernetes.Namespace,
+			Labels: map[string]string{
+				"app": pipeline,
+			},
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &container.Scale,
@@ -536,7 +538,7 @@ func (kube *Kubernetes) CreateDeployment(pipeline string, container *pipeline.Co
 	}
 
 	// If the deployment exists delete and recreate it.
-	if kube.DeploymentExists(depName) {
+	if kube.DeploymentExists(name) {
 		container.State = "Terminating"
 		kube.DestroyDeployment(pipeline, container)
 	}
@@ -632,24 +634,24 @@ func (kube *Kubernetes) GetServicePorts(instances []*pipeline.Command) []corev1.
 	return ports
 }
 
-func (kube *Kubernetes) CreateService(serviceName string, selector string, instances []*pipeline.Command) string {
+func (kube *Kubernetes) CreateService(name string, instances []*pipeline.Command) string {
 	ports := kube.GetServicePorts(instances)
-	log.Debug("Found ", len(ports), " ports for service ", serviceName)
+	log.Debug("Found ", len(ports), " ports for service ", name)
 	if len(ports) == 0 {
-		log.Info("Not creating ", serviceName, " no ports to bind")
+		log.Info("Not creating ", name, " no ports to bind")
 		return ""
 	}
-	log.Info("Creating service ", serviceName)
+	log.Info("Creating service ", name)
 	client := kube.ClientSet.CoreV1().Services(kube.Config.Kubernetes.Namespace)
 	service := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: serviceName,
+			Name: name,
 		},
 		Spec: corev1.ServiceSpec{
 			Ports: ports,
 			Type:  corev1.ServiceTypeNodePort,
 			Selector: map[string]string{
-				"app": selector,
+				"app": name,
 			},
 		},
 	}
@@ -657,11 +659,11 @@ func (kube *Kubernetes) CreateService(serviceName string, selector string, insta
 	if err != nil {
 		// service probably already exists
 		// TODO, enhance error check/destroy/recreate
-		return serviceName
+		return name
 	}
 
 	log.Info("Created service ", result.GetObjectMeta().GetName())
-	kube.CreateIngress(serviceName, instances)
+	kube.CreateIngress(name, instances)
 	return result.GetObjectMeta().GetName()
 }
 

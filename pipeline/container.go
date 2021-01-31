@@ -23,7 +23,7 @@ func NewContainer(pipeline *Pipeline, cell map[string]interface{}) *Container {
 	}
 
 	if cell["name"] != nil {
-		container.Name = sanitize(cell["name"].(string), "-")
+		container.Name = Sanitize(cell["name"].(string), "-")
 	}
 
 	if cell["settype"] != nil {

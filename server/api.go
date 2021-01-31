@@ -377,12 +377,10 @@ func (api *Api) Get(c *gin.Context) {
 }
 
 func (api *Api) PrefixScan(c *gin.Context) {
-
 	result := Result{Result: "error"}
 	result.Code = 200
 	result.Result = "OK"
 	result.Message = make(map[string]interface{})
-
 	request := make(map[string]string)
 
 	request["bucket"] = strings.Trim(c.Params.ByName("bucket"), "/")

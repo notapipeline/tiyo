@@ -23,6 +23,7 @@ type Command struct {
 	Parent        string `json:"parent"`
 	Name          string `json:"name"`
 	Command       string `json:"command"`
+	AutoStart     bool   `json:"autostart"`
 	Args          string `json:"args"`
 	Version       string `json:"version"`
 	Language      string `json:"element"`
@@ -33,6 +34,8 @@ type Command struct {
 	UseExisting   bool   `json:"existing"`
 	ExposePort    int    `json:"exposeport"`
 	IsUdp         bool   `json:"isudp"`
+	Cpu           string `json:"cpu"`
+	Memory        string `json:"memory"`
 	StartTime     int64  `json:""`
 	EndTime       int64  `json:""`
 
@@ -47,7 +50,7 @@ type Command struct {
 
 var regex *regexp.Regexp
 
-func sanitize(str string, sep string) string {
+func Sanitize(str string, sep string) string {
 	regex, err := regexp.Compile("[^a-zA-Z0-9]+")
 	if err != nil {
 		log.Fatal("Failed to compile regex - ", err)
@@ -60,6 +63,7 @@ func NewCommand(cell map[string]interface{}) *Command {
 		Id:            "",
 		Name:          "",
 		Command:       "",
+		AutoStart:     false,
 		Args:          "",
 		Version:       "",
 		Language:      "",
@@ -72,6 +76,8 @@ func NewCommand(cell map[string]interface{}) *Command {
 		IsUdp:         false,
 		StartTime:     0,
 		EndTime:       0,
+		Cpu:           "500m",
+		Memory:        "256Mi",
 	}
 
 	if cell["id"] != nil {
@@ -83,11 +89,15 @@ func NewCommand(cell map[string]interface{}) *Command {
 	}
 
 	if cell["name"] != nil {
-		command.Name = sanitize(cell["name"].(string), "-")
+		command.Name = Sanitize(cell["name"].(string), "-")
 	}
 
 	if cell["command"] != nil {
 		command.Command = cell["command"].(string)
+	}
+
+	if cell["autostart"] != nil {
+		command.AutoStart = cell["autostart"].(bool)
 	}
 
 	if cell["arguments"] != nil {
@@ -138,6 +148,14 @@ func NewCommand(cell map[string]interface{}) *Command {
 		command.IsUdp = cell["isudp"].(bool)
 	}
 
+	if cell["cpu"] != nil {
+		command.Cpu = cell["cpu"].(string)
+	}
+
+	if cell["memory"] != nil {
+		command.Memory = cell["memory"].(string)
+	}
+
 	return &command
 }
 
@@ -153,6 +171,8 @@ func (command *Command) GetContainer(asTag bool) string {
 		if asTag {
 			container = "datascience-notebook"
 		}
+	case "dockerfile":
+		container = command.Name
 	}
 
 	var name string = container + ":" + command.Version
@@ -182,6 +202,9 @@ func (command *Command) GenerateRandomString() string {
 }
 
 func (command *Command) writeScript() (string, error) {
+	if command.Language == "dockerfile" {
+		return "", nil
+	}
 	var name string = command.GenerateRandomString()
 	name = fmt.Sprintf("/tmp/%s-%s", command.Name, name)
 	var (
@@ -253,8 +276,8 @@ func (command *Command) Execute(directory string, subdir string, filename string
 
 	info, _ := os.Stat(directory)
 	if info != nil {
-		command.collectFiles(directory, filename)
-		directory = filepath.Join(directory, subdir)
+		var filedir string = command.collectFiles(directory, filename)
+		directory = filepath.Join(directory, subdir, filedir)
 		if _, err := os.Stat(directory); err != nil {
 			_ = os.Mkdir(directory, 0755)
 		}
@@ -288,24 +311,33 @@ func (command *Command) Execute(directory string, subdir string, filename string
 	return command.ExecuteWithTimeout(cmd, done)
 }
 
-func (command *Command) collectFiles(directory string, filename string) {
+// Globs the input directory and appends each file as an argument to the command
+//
+// Uses command.FileSeperator to append the filenames
+// If more than 1 file is found, returns the filename as an additional directory
+// otherwise returns an empty string
+func (command *Command) collectFiles(directory string, filename string) string {
 	if command.Timeout == -1 {
 		log.Info("Not collecting files for forever run")
-		return
+		return ""
 	}
 
 	var glob string = filepath.Join(directory, "*"+filename+"*")
 	files, err := filepath.Glob(glob)
 	if err != nil {
 		log.Error(err)
-		return
+		return ""
 	}
 	log.Info("Found ", len(files), " for fileglob ", glob)
+	var dirReturn = ""
+	if len(files) > 1 {
+		dirReturn = filename
+	}
 
 	var csifiles string = ""
 	for index, file := range files {
 		if command.FileSeperator == "," {
-			csifiles = csifiles + ","
+			csifiles = strings.TrimLeft(strings.Join([]string{csifiles, file}, ","), ",")
 			continue
 		} else if command.FileSeperator == ", " {
 			if index < len(files)-1 {
@@ -321,8 +353,10 @@ func (command *Command) collectFiles(directory string, filename string) {
 		command.ProcessArgs = append(command.ProcessArgs, file)
 	}
 	if csifiles != "" {
+		log.Info("Got Comma separated index of files ", csifiles)
 		command.ProcessArgs = append(command.ProcessArgs, strings.Trim(csifiles, ","))
 	}
+	return dirReturn
 }
 
 // Executes the given command in a "forever" loop
@@ -353,16 +387,26 @@ func (command *Command) ExecuteWithTimeout(cmd *exec.Cmd, done chan error) int {
 	go func() {
 		done <- cmd.Wait()
 	}()
+
+	var exitCode int = 1
 	select {
 	case err := <-done:
 		if exitError, ok := err.(*exec.ExitError); ok {
 			command.EndTime = time.Now().UnixNano()
-			return exitError.ExitCode()
+			exitCode = exitError.ExitCode()
 		}
+		break
 	case <-time.After(time.Duration(command.Timeout) * time.Second):
 		log.Error("Command ", command.Name, " exited due to timeout - ", command.Timeout, " seconds exceeded")
-		return 1
+		break
 	}
+	command.recreateTmp()
+	return exitCode
+}
 
-	return 0
+func (command *Command) recreateTmp() {
+	err := os.RemoveAll("/tmp")
+	if err == nil {
+		os.Mkdir("/tmp", 0775)
+	}
 }

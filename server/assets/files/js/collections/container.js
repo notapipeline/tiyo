@@ -31,6 +31,14 @@ class Container {
         '      </td>'+
         '    </tr>'+
         '    <tr>'+
+        '      <td><label for="appcpu">cpu</label></td>'+
+        '      <td><input id="appcpu" value=""></td>'+
+        '    </tr>'+
+        '    <tr>'+
+        '      <td><label for="appmemory">Memory</label></td>'+
+        '      <td><input id="appmemory" value=""></td>'+
+        '    </tr>'+
+        '    <tr>'+
         '      <td><label for="appscript">script</label></td>'+
         '      <td><input type="checkbox" id="appscript" />'+
         '          <input type="button" id="editappscript" value="edit" onclick="pipeline.showEditor()" />' +
@@ -97,6 +105,9 @@ class Container {
         $('#appexposeport').val(view.model.attributes.exposeport);
         $('#appisudp').prop('checked', view.model.attributes.isudp);
 
+        $('#appcpu').val(view.model.attributes.cpu);
+        $('#appmemory').val(view.model.attributes.memory);
+
         if (view.model.attributes.script) {
             $('#appscript').prop('disabled', false);
             $('#appscript').prop('checked', true);
@@ -127,6 +138,9 @@ class Container {
 
             view.model.attributes.timeout = parseInt($('#apptimeout').val(), 10);
             view.model.attributes.script = $('#appscript').prop('checked');
+
+            view.model.attributes.cpu = $('#appcpu').val();
+            view.model.attributes.memory = $('#appmemory').val();
 
             view.model.attributes.exposeport = parseInt($('#appexposeport').val());
             view.model.attributes.isudp = $('#appisudp').prop('checked');
@@ -172,6 +186,9 @@ joint.shapes.container.Container = joint.shapes.devs.Model.extend({
         existing: false,
         exposeport: -1,
         isudp: false,
+
+        cpu: "500m",
+        memory: "256Mi",
 
         position: { x: 50, y: 50 },
         size: { width: 50, height: 50 },

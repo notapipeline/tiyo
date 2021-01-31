@@ -7,14 +7,12 @@ import (
 	"io/ioutil"
 	"net/http"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/choclab-net/tiyo/config"
 	"github.com/choclab-net/tiyo/pipeline"
 
 	"github.com/choclab-net/tiyo/server"
-	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -55,28 +53,11 @@ func NewQueue(config *config.Config, pipeline *pipeline.Pipeline, bucket string)
 // queue management is here.
 
 // Register a container into the queue executors
-func (queue *Queue) Register(c *gin.Context) {
-	expected := []string{"pod", "container", "status"}
-	request := make(map[string]interface{})
-	if err := c.ShouldBind(&request); err != nil {
-		for _, expect := range expected {
-			request[expect] = c.PostForm(expect)
-		}
-	}
-	log.Debug(request)
-	if ok, missing := queue.checkFields(expected, request); !ok {
-		result := server.NewResult()
-		result.Code = 400
-		result.Result = "Error"
-		result.Message = "The following fields are mising from the request " + strings.Join(missing, ", ")
-		c.JSON(result.Code, result)
-		return
-	}
-
+func (queue *Queue) Register(request map[string]interface{}) *server.Result {
 	var key string = request["container"].(string) + ":" + request["pod"].(string)
 	log.Debug(queue.PodBucket)
 	data := queue.jsonBody(queue.PodBucket, key, request["status"].(string))
-	result := queue.put(c, data)
+	result := queue.put(data)
 	if request["status"] == "Ready" {
 		var (
 			code    int               = 202
@@ -92,7 +73,7 @@ func (queue *Queue) Register(c *gin.Context) {
 			result.Message = ""
 		}
 	}
-	c.JSON(result.Code, result)
+	return result
 }
 
 func (queue *Queue) Stop() {
@@ -127,7 +108,7 @@ func (queue *Queue) GetQueueItem(container string, pod string) (int, *server.Que
 }
 
 // Put data into the bolt store
-func (queue *Queue) put(c *gin.Context, request []byte) *server.Result {
+func (queue *Queue) put(request []byte) *server.Result {
 	result := server.NewResult()
 	result.Code = 204
 	result.Result = "No content"
@@ -148,19 +129,6 @@ func (queue *Queue) put(c *gin.Context, request []byte) *server.Result {
 	code, _ := queue.makeRequest(req)
 	result.Code = code
 	return result
-}
-
-// Checks a posted request for all expected fields
-// return true if fields are ok, false otherwise
-func (queue *Queue) checkFields(expected []string, request map[string]interface{}) (bool, []string) {
-	log.Debug(request)
-	missing := make([]string, 0)
-	for _, key := range expected {
-		if _, ok := request[key]; !ok {
-			missing = append(missing, key)
-		}
-	}
-	return len(missing) == 0, missing
 }
 
 func (queue *Queue) makeRequest(request *http.Request) (int, []byte) {

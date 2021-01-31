@@ -1,14 +1,19 @@
 package flow
 
 import (
+	"bytes"
+	"crypto/tls"
+	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 
 	log "github.com/sirupsen/logrus"
 
@@ -31,7 +36,7 @@ type Flow struct {
 
 func NewFlow() *Flow {
 	flow := Flow{}
-	flow.Api = NewFlowApi(&flow)
+	flow.Api = NewFlowApi()
 	flow.IsExecuting = false
 	return &flow
 }
@@ -104,7 +109,14 @@ func (flow *Flow) WriteDockerfile(instance *pipeline.Command) error {
 	var name string = "Dockerfile"
 	template := fmt.Sprintf(dockerTemplate, instance.Image)
 	if instance.Language == "dockerfile" && instance.Custom {
-		template = instance.ScriptContent
+		var (
+			script []byte
+			err    error
+		)
+		if script, err = base64.StdEncoding.DecodeString(instance.ScriptContent); err != nil {
+			return err
+		}
+		template = string(script)
 	}
 
 	file, err := os.Create(name)
@@ -232,6 +244,60 @@ func (flow *Flow) Execute() {
 			go flow.Kubernetes.CreateDaemonSet(flow.Pipeline.DnsName, item)
 		}
 	}
+	flow.triggerServices()
+}
+
+func (flow *Flow) Find(name string, config *config.Config) *Flow {
+	log.Debug("Searching for pipeline matching ", name)
+	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{
+		InsecureSkipVerify: config.UseInsecureTLS,
+	}
+
+	// really wants to be a "keys" list rather than a full scan
+	var url string = fmt.Sprintf("%s/api/v1/scan/pipeline", config.AssembleServer())
+	request, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		log.Error(err)
+		return nil
+	}
+
+	client := &http.Client{}
+	response, err := client.Do(request)
+	if err != nil {
+		log.Error(err)
+		return nil
+	}
+
+	defer response.Body.Close()
+	message := struct {
+		Code    int                    `json:"code"`
+		Result  string                 `json:"result"`
+		Message map[string]interface{} `json:"message"`
+	}{}
+
+	body, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		log.Error(err)
+		return nil
+	}
+	err = json.Unmarshal(body, &message)
+	if err != nil {
+		log.Error(err)
+		return nil
+	}
+
+	var newFlow *Flow = NewFlow()
+	newFlow.Config = config
+	for key := range message.Message["keys"].(map[string]interface{}) {
+		log.Debug(key)
+		var pipelineName string = pipeline.Sanitize(key, "-")
+		log.Debug(pipelineName, " ", name)
+		if pipelineName == name || strings.HasPrefix(name, pipelineName) {
+			newFlow.Setup(key)
+			return newFlow
+		}
+	}
+	return nil
 }
 
 func (flow *Flow) Stop() {
@@ -284,7 +350,7 @@ func (flow *Flow) Run() int {
 	log.Info("Setting working directory to ", flow.Config.DbDir)
 	os.Chdir(flow.Config.DbDir)
 	// Start server in background
-	go flow.Api.Serve()
+	go flow.Api.Serve(flow.Config)
 	if flow.Name != "" {
 		flow.Setup(flow.Name)
 		flow.Execute()
@@ -292,4 +358,38 @@ func (flow *Flow) Run() int {
 	<-done
 	log.Info("Flow complete")
 	return 0
+}
+
+func (flow *Flow) triggerServices() {
+	for _, container := range flow.Pipeline.Containers {
+		for _, instance := range container.GetChildren() {
+			if instance.ExposePort < 1 || !instance.Autostart {
+				continue
+			}
+
+			// example:
+			// rna-star-tiyo:2.7.7a:sorting:root:GL53_003_Plate3_c1_Gfi1_HE_S3 - command.Id
+			var commandKey string = instance.Name + "-tiyo:" + instance.Version + ":" + container.Name
+			var contents map[string]string = make(map[string]string)
+			contents[commandKey] = instance.Id
+			data, _ := json.Marshal(contents)
+
+			request, err := http.NewRequest(
+				http.MethodPut,
+				flow.Config.AssembleServer()+"/api/v1/queue/"+flow.Pipeline.BucketName,
+				bytes.NewBuffer(data))
+
+			if err != nil {
+				log.Error(err)
+			}
+			request.Header.Set("Content-Type", "application/json; charset=utf-8")
+			request.Header.Set("Connection", "close")
+			request.Close = true
+
+			response, err := client.Do(request)
+			if err != nil {
+				log.Error(err)
+			}
+		}
+	}
 }
