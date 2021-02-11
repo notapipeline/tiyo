@@ -32,7 +32,7 @@ To support this, Tiyo uses [ACE](https://ace.c9.io/) to provide an inline editor
 supports a number of pre-built containers, which when running in Bio-informatics mode, come from
 [Biocontainers](https://biocontainers.pro/).
 
-## Initial Support
+## Container languages
 ![initial\_offerings](docs/images/initial-offerings.png)
 
 The principle languages integrated into Tiyo are:
@@ -59,7 +59,7 @@ Right click on any element or link to set properties against it.
 
 Application container properties            | Set properties                      | Source properties
 :------------------------------------------:|:-----------------------------------:|:------------------------------------:
-![](docs/images/application-properties.png) | ![](docs/images/tcp-properties.png) | ![](docs/images/source-properties.png)
+![](docs/images/application-properties.png) | ![](docs/images/set-properties.png) | ![](docs/images/source-properties.png)
 
 Any options not available on the given type will be greyed out/disabled, for example script on a pre-built container
 or `watch` events on a socket.
@@ -94,7 +94,7 @@ integration. In future, there may be the option to choose between how you wish y
 ## Commands
 Tiyo may be executed in one of 4 separate modes from the same binary
 
-- `Assemble` Runs the web interface for building (assembling) your pipeline. API listening on default port 8180
+- `assemble` Runs the web interface for building (assembling) your pipeline. API listening on default port 8180
 - `fill` Listens for file events and loads the file names - writes to assemble
 - `flow` Builds the containers and prepares the instruction-set for execution. Backend API listening on default port 8280
   reads from / writes to Assemble
@@ -122,6 +122,14 @@ a HTTP DELETE request using the [API](docs/api.md).
 > Testing shows binaries compiled without using this flag fail on Alpine. There may be others.
 >
 > If your container refuses to start with `binary not found`, either look for an alternate container, or compile with
-> this flag as appropriate.
+> this flag as appropriate. The make file includes this flag by default.
 
+### Build / local installation
+```
+make && make install
+```
+
+### Server installation
+Copy the tiyo binary to the assemble servers `/usr/local/bin` directory and create a new `tiyo.json` configuration file
+in `/etc/tiyo` using the sample provided.
 

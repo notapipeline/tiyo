@@ -264,7 +264,7 @@
                 </ul>
                 <ul id="scriptsource" class="uk-switcher uk-margin">
                     <li id="editor" class="uk-active"></li>
-                    <li id="gitrepo">
+                    <li id="gitdetails">
                         <form>
                             <table>
                                 <tbody>

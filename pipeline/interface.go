@@ -56,6 +56,9 @@ type Pipeline struct {
 
 	// Global environment settings
 	Environment []string
+
+	// Global pipeline credentials (encrypted)
+	Credentials map[string]string
 }
 
 // GetParent : Gets the parent (if any) of the current command element
@@ -404,6 +407,7 @@ func GetPipeline(config *config.Config, name string) (*Pipeline, error) {
 	pipeline.Sources = make(map[string]*Source)
 	pipeline.Config = config
 	pipeline.Environment = make([]string, 0)
+	pipeline.Credentials = make(map[string]string)
 
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: config.UseInsecureTLS}
 	// Do not use pipeline.Name here - that has been Sanitized and will not match
@@ -444,6 +448,13 @@ func GetPipeline(config *config.Config, name string) (*Pipeline, error) {
 		pipeline.Environment = make([]string, 0)
 		for _, item := range env {
 			pipeline.Environment = append(pipeline.Environment, item.(string))
+		}
+	}
+
+	if credentials, ok := content["credentials"]; ok {
+		creds := credentials.(map[string]interface{})
+		for key, value := range creds {
+			pipeline.Credentials[key] = value.(string)
 		}
 	}
 

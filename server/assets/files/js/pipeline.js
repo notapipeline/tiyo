@@ -871,19 +871,20 @@ class Pipeline {
      */
     saveScript() {
         this.appelement.attributes.scriptcontent = btoa(this.editor.getValue());
+        var hashed = this.appelement.attributes.gitrepo.password;
         this.appelement.attributes.gitrepo = {
             repo: $('#gitrepo').val(),
             branch: $('#gitbranch').val(),
             username: $('#gituser').val(),
             entrypoint: $('#gitentry').val(),
+            password: hashed,
         }
 
-        var hashed = this.appelement.attributes.gitrepo.password;
-        var newpass = $('gitpass').val();
+        var newpass = $('#gitpass').val();
         if (newpass != hashed) {
-            $.post("/api/v1/encrypt", {
+            $.post("/api/v1/encrypt", JSON.stringify({
                 value: newpass,
-            }, (data, status) => {
+            }), (data, status) => {
                 this.appelement.attributes.gitrepo.password = data.message;
             }).fail((error) => {
                 handleError(error)

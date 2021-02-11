@@ -13,9 +13,10 @@ jQuery.each( [ "post", "put", "delete" ], function( i, method ) {
             data = undefined;
         }
 
+        var contentType = type;
         if (typeof(type) === 'undefined') {
             type = 'json';
-            contentType = 'application/json';
+            contentType = 'application/json; charset=utf-8';
         }
         return jQuery.ajax({
             url: url,

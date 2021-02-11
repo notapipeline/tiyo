@@ -1,0 +1,34 @@
+{
+  "sequenceBaseDir": "/mnt/sequencer",
+  "skipVerify": false,
+  "dnsName": "example.com",
+  "dbname": "tiyo",
+  "externalNginx": true,
+  "assemble": {
+    "host": "assemble",
+    "port": 8180,
+    "cacert": "",
+    "cakey": "",
+    "passphrase": ""
+  },
+  "flow": {
+    "host": "flow",
+    "port": 8280,
+    "cacert": "",
+    "cakey": "",
+    "passphrase": ""
+  },
+  "kubernetes": {
+    "kubeconfig": "config",
+    "namespace": "default",
+    "volume": ""
+  },
+  "docker": {
+    "address": "",
+    "username": "",
+    "token": "",
+    "upstream": "biocontainers",
+    "primary": ""
+  }
+}
+

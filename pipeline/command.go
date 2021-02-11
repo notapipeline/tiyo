@@ -88,6 +88,9 @@ type Command struct {
 	// Environment variables to set directly on the command
 	Environment []string `json:"environment"`
 
+	// Details about any Git repository configured for the command
+	GitRepo *GitRepo `json:"gitrepo"`
+
 	// The image string to build the docker container from and load into kubernetes
 	Image string
 
@@ -226,6 +229,12 @@ func NewCommand(cell map[string]interface{}) *Command {
 		for _, value := range envvars {
 			command.Environment = append(command.Environment, value.(string))
 		}
+	}
+
+	if cell["gitrepo"] != nil {
+		gitRepo := NewGitRepo()
+		gitRepo.Configure(cell["gitrepo"].(map[string]interface{}))
+		command.GitRepo = gitRepo
 	}
 
 	return &command

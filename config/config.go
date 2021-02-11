@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"strings"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -95,7 +96,6 @@ type Docker struct {
 	Primary string `json:"primary"`
 
 	// Set to true if both primary and upstream are the same location
-	// if set, only one needs to be provided
 	SameSource bool `default:"false"`
 }
 
@@ -171,6 +171,17 @@ func NewConfig() (*Config, error) {
 	defer jsonFile.Close()
 	byteValue, _ := ioutil.ReadAll(jsonFile)
 	json.Unmarshal([]byte(byteValue), &config)
+
+	// Allow assemble to be run at root
+	if config.Assemble.Host == "" {
+		config.Assemble.Host = config.DNSName
+	} else if len(strings.Split(config.Assemble.Host, ".")) == 1 {
+		config.Assemble.Host = config.Assemble.Host + "." + config.DNSName
+	}
+
+	if len(strings.Split(config.Flow.Host, ".")) == 1 {
+		config.Assemble.Host = config.Flow.Host + "." + config.DNSName
+	}
 
 	if config.Docker.Upstream == "" && config.Docker.Primary != "" {
 		config.Docker.Upstream = config.Docker.Primary

@@ -20,9 +20,9 @@ import (
 	"time"
 
 	"github.com/boltdb/bolt"
+	"github.com/gin-gonic/gin"
 	"github.com/notapipeline/tiyo/config"
 	"github.com/notapipeline/tiyo/pipeline"
-	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -1018,7 +1018,7 @@ func (api *API) Encrypt(c *gin.Context) {
 		result := Result{
 			Code:    400,
 			Result:  "Error",
-			Message: fmt.Sprintf("Bad request whilst encrypting passphrase %+v", request),
+			Message: fmt.Sprintf("Bad request whilst encrypting passphrase"),
 		}
 		c.JSON(result.Code, result)
 		return

@@ -35,6 +35,7 @@ import (
 
 	"github.com/notapipeline/tiyo/config"
 	"github.com/notapipeline/tiyo/pipeline"
+	"github.com/notapipeline/tiyo/server"
 )
 
 // Flow : Main structure of the Flow subsystem
@@ -294,6 +295,8 @@ func (flow *Flow) Execute() {
 		case "daemonset":
 			go flow.Kubernetes.CreateDaemonSet(flow.Pipeline.DNSName, item)
 		}
+
+		go flow.checkout(item.GetChildren())
 	}
 	flow.triggerServices()
 }
@@ -473,6 +476,97 @@ func (flow *Flow) triggerServices() {
 				log.Error("Received unknown response code ", response.StatusCode, " for address ", address)
 			}
 			log.Info("Queued command ", commandKey)
+		}
+	}
+}
+
+type DecryptBody struct {
+	Value string `json:"value"`
+	Token string `json:"token"`
+}
+
+// Decrypt : Sends a string back to assemble for decryption
+func (flow *Flow) Decrypt(what string) (string, error) {
+	var message string = ""
+	var content DecryptBody = DecryptBody{
+		Value: what,
+		Token: flow.Config.GetPassphrase("flow"),
+	}
+	data, _ := json.Marshal(content)
+
+	var address string = flow.Config.AssembleServer() + "/api/v1/decrypt"
+	request, err := http.NewRequest(
+		http.MethodPost,
+		address,
+		bytes.NewBuffer(data))
+
+	if err != nil {
+		return message, err
+	}
+
+	request.Header.Set("Content-Type", "application/json; charset=utf-8")
+	request.Header.Set("Connection", "close")
+	request.Close = true
+
+	client := &http.Client{
+		Timeout: config.TIMEOUT,
+	}
+	response, err := client.Do(request)
+	if err != nil {
+		return message, err
+	} else if response.StatusCode != 200 {
+		return message, fmt.Errorf("Failed to decrypt password - %d ", response.StatusCode)
+	}
+
+	var body []byte
+	defer response.Body.Close()
+	body, err = ioutil.ReadAll(response.Body)
+	if err != nil {
+		return message, err
+	}
+
+	result := server.Result{}
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		return message, err
+	}
+	return result.Message.(string), nil
+}
+
+// Clones a git repository for each container in the set that has a git repo described
+func (flow *Flow) checkout(containers []*pipeline.Command) {
+	for _, container := range containers {
+		var path string = filepath.Join(
+			flow.Config.SequenceBaseDir,
+			flow.Config.Kubernetes.Volume,
+			container.Name,
+		)
+		var password string = container.GitRepo.Password
+		if password == "" {
+			if container.GitRepo.Username != "" {
+				if _, ok := flow.Pipeline.Credentials[container.GitRepo.Username]; !ok {
+					log.Error("No password supplied for repo ", container.GitRepo.RepoURL)
+					return
+				}
+				password = flow.Pipeline.Credentials[container.GitRepo.Username]
+			}
+		}
+		// There is no need to decrypt the password until it is requried.
+		// This aids in keeping the app secure by not holding unencrypted
+		// passwords in memory for longer than they absolutely need to be.
+
+		if password != "" {
+			passwordDecrypted, err := flow.Decrypt(password)
+			if err != nil {
+				log.Error(err)
+			}
+
+			var options map[string]string = map[string]string{
+				"password": passwordDecrypted,
+			}
+
+			container.GitRepo.Clone(path, options)
+			container.GitRepo.Checkout()
 		}
 	}
 }
