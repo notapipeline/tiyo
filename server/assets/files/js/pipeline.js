@@ -1,3 +1,10 @@
+/* Copyright 2021 The Tiyo authors
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 // Setup pipeline model
 class Pipeline {
 
@@ -20,10 +27,29 @@ class Pipeline {
     autoSave = null;
     pipeline = "";
     executing = false;
+    lastStatus = null;
+
+    gauges = {
+        pipelineCpu: {
+            label: "CPU",
+            gauge: null,
+        },
+        pipelineMemory: {
+            label: "Memory",
+            gauge: null,
+        },
+        availableCpu: {
+            label: "CPU",
+            gauge: null,
+        },
+        availableMemory: {
+            label: "Memory",
+            gauge: null,
+        },
+    };
 
     constructor() {
         this.graph = new joint.dia.Graph;
-        console.log(collections.link.clone('file'));
         this.paper = new joint.dia.Paper({
             el: $('#paper-pipeline'),
             model: this.graph,
@@ -47,6 +73,7 @@ class Pipeline {
         $('#play').css({
             color: '#FF0000',
         });
+        this.makeGauges();
     }
 
     save() {
@@ -61,11 +88,11 @@ class Pipeline {
 
         var title = $('.editable.pipelinetitle').text();
         if (title != "Untitled" && this.graph.toJSON().cells.length > 0) {
-            console.log('Saving pipeline' + title);
             put('pipeline', null, title, btoa(JSON.stringify(this.graph.toJSON())));
             createFileStore(title);
             Cookies.set('pipeline', title);
             this.pipeline = title;
+            success("Pipeline saved");
         }
 
         if (!this.autoSave) {
@@ -74,22 +101,26 @@ class Pipeline {
     }
 
     load() {
-        console.log('Valid for pipeline?', router.lastResolved()[0].url);
         if (router.lastResolved()[0].url != "pipeline") {
             return;
         }
         this.pipeline = Cookies.get('pipeline');
-        console.log('Loading pipeline ' + this.pipeline);
         if (this.pipeline !== "") {
-            $.get('/api/v1/bucket/pipeline/' + encodeURI(this.pipeline), function(data, status) {
-                if (data && data.code == 200) {
-                    this.graph.fromJSON(JSON.parse(atob(data.message)));
-                    $('.editable.pipelinetitle').text(Cookies.get('pipeline'));
-                    this.status();
+            $.get('/api/v1/bucket/pipeline/' + encodeURI(this.pipeline),
+                (data, status) => {
+                    if (data && data.code == 200) {
+                        this.graph.fromJSON(JSON.parse(atob(data.message)));
+                        $('.editable.pipelinetitle').text(Cookies.get('pipeline'));
+                        this.status();
+                        this.makeGauges();
+                    }
                 }
-            }.bind(this)).fail(function(e) {
-                Cookies.remove('pipeline');
-            });
+            ).fail(
+                (error) => {
+                    Cookies.remove('pipeline');
+                    handleError(error);
+                }
+            );
         }
     }
 
@@ -103,16 +134,15 @@ class Pipeline {
             'pointer-events': 'all'
         });
 
-        $.post("/api/v1/execute", JSON.stringify({
+        $.post("/api/v1/execute",
+            JSON.stringify({
                 pipeline: this.pipeline,
             }),
-            function (data, status) {
+            (data, status) => {
                 this.status();
-            }.bind(this)
-        ).fail(function(e) {
-            $('#message').addClass('uk-alert-warning');
-            console.log(e);
-            $('#message').find('p').html('Failed to create bucket');
+            }
+        ).fail((error) => {
+            handleError(error)
         });
     }
 
@@ -125,53 +155,57 @@ class Pipeline {
             this.statusCheck = setInterval(this.status.bind(this), this.INTERVAL);
         }
 
-        $.get("/api/v1/status/" + encodeURI(this.pipeline), function(data) {
-            $("#execute").prop('disabled', true);
-            console.log(data.message);
+        $.get("/api/v1/status/" + encodeURI(this.pipeline),
+            (data) => {
+                $("#execute").prop('disabled', true);
+                this.lastStatus = data.message;
 
-            var status = data["message"]["status"];
-            var groups = data.message.groups;
+                var status = data["message"]["status"];
+                var groups = data.message.groups;
+                var nodes = data.message.nodes;
 
-            var color = '#000';
-            for (var key in groups) {
-                var group = groups[key];
-                var groupContainer = this.graph.getCell(key);
-                var groupContainerView = this.paper.findViewByModel(groupContainer);
+                var color = '#000';
+                for (var key in groups) {
+                    var group = groups[key];
+                    var groupContainer = this.graph.getCell(key);
+                    var groupContainerView = this.paper.findViewByModel(groupContainer);
 
-                console.log(group.state)
-                switch (group.state) {
-                    case 'Failed':
-                        color = '#FF0000';
-                        break;
-                    case 'Ready':
-                    case 'Running':
-                        color = '#0000FF';
-                        break;
-                    case 'Busy':
-                    case 'Executing':
-                        color = '#00FF00';
-                        break;
-                    case 'Terminated':
-                    case 'Terminating':
-                        color = '#7A581D';
-                        break;
-                    case 'Creating':
-                    case 'Pending':
-                        color = '#D66304';
-                        break;
-                }
-
-                groupContainerView.model.attributes.attrs.rect.stroke = color;
-                joint.dia.ElementView.prototype.render.apply(groupContainerView);
-                var cells = [];
-                for (var i=0; i < groupContainer.attributes.embeds.length; i++) {
-                    if (this.graph.getCell(groupContainer.attributes.embeds[i]).attributes.type == 'container.Container') {
-                        cells.push(groupContainer.attributes.embeds[i]);
+                    switch (group.state) {
+                        case 'Failed':
+                            color = '#FF0000';
+                            break;
+                        case 'Ready':
+                        case 'Running':
+                            color = '#0000FF';
+                            break;
+                        case 'Busy':
+                        case 'Executing':
+                            color = '#00FF00';
+                            break;
+                        case 'Terminated':
+                        case 'Terminating':
+                            color = '#7A581D';
+                            break;
+                        case 'Creating':
+                        case 'Pending':
+                            color = '#D66304';
+                            break;
                     }
+
+                    groupContainerView.model.attributes.attrs.rect.stroke = color;
+                    joint.dia.ElementView.prototype.render.apply(groupContainerView);
+                    var cells = [];
+                    for (var i=0; i < groupContainer.attributes.embeds.length; i++) {
+                        if (this.graph.getCell(groupContainer.attributes.embeds[i]).attributes.type == 'container.Container') {
+                            cells.push(groupContainer.attributes.embeds[i]);
+                        }
+                    }
+                    this.podStatus(group, cells, groupContainer.attributes.scale);
                 }
-                this.podStatus(group, cells, groupContainer.attributes.scale);
             }
-        }.bind(this));
+        ).fail((error) => {
+            handleError(error)
+        });
     }
 
     podStatus(group, containerKeys, expected) {
@@ -190,7 +224,9 @@ class Pipeline {
             var pod = group.pods[podkey];
             for (var container in pod.containers) {
                 var id = pod.containers[container].id;
+                try {
                 containers[id][pod.containers[container].state] += 1;
+                } catch (TypeError) {}
                 if (pod.containers[container].state == 'Ready' || pod.containers[container].state == 'Busy') {
                     containers[id]["Running"] += 1
                 }
@@ -220,9 +256,8 @@ class Pipeline {
             });
             joint.dia.ElementView.prototype.render.apply(cellView);
         }
-        console.log(containers);
+        this.makeGauges();
     }
-
 
     playpause() {
         if (this.executing) {
@@ -252,7 +287,6 @@ class Pipeline {
             }.bind(this)
         ).fail(function(e) {
             $('#message').addClass('uk-alert-warning');
-            console.log(e);
             $('#message').find('p').html('Failed to create bucket');
         });
     }
@@ -269,7 +303,6 @@ class Pipeline {
             }.bind(this)
         ).fail(function(e) {
             $('#message').addClass('uk-alert-warning');
-            console.log(e);
             $('#message').find('p').html('Failed to create bucket');
         });
     }
@@ -291,15 +324,28 @@ class Pipeline {
             }.bind(this)
         ).fail(function(e) {
             $('#message').addClass('uk-alert-warning');
-            console.log(e);
             $('#message').find('p').html('Failed to create bucket');
         });
     }
+
+    canvasSize() {
+        var canvas = $('#paper-pipeline');
+        var size = Object();
+        size.w = canvas.width();
+        size.h = canvas.height();
+        return size;
+    }
+
 
     setupEvents() {
         $('#paper-pipeline').mousemove(function(event) {
             this.drag(event)
         }.bind(this));
+
+        $(window).resize(() => {
+            const canvas = this.canvasSize();
+            this.paper.setDimensions(canvas.w, canvas.h);
+        });
 
         this.paper.on({
             'blank:mousewheel':    (event, x, y, delta) => { this.blankMouseWheel(event, x, y, delta); },
@@ -312,6 +358,7 @@ class Pipeline {
             'element:mouseover':   (view, event, x, y) => { this.elementMouseOver(view, event, x, y); },
             'element:mouseleave':  (view, event, x, y) => { this.elementMouseLeave(view, event, x, y); },
             'element:mouseenter':  (view, event, x, y) => { this.elementMouseEnter(view, event, x, y) },
+            'element:mousewheel':  (view, event, x, y, delta) => { this.blankMouseWheel(event, x, y, delta); },
             'element:pointerup':   (view, event, x, y) => { this.elementPointerUp(view, event, x, y); },
 
             'cell:pointerdown':    (view, event, x, y) => { this.cellPointerDown(view); },
@@ -321,26 +368,27 @@ class Pipeline {
 
     drag(event) {
         if (this.dragging) {
-            this.paper.translate(
-                event.offsetX - this.dragStartPosition.x,
-                event.offsetY - this.dragStartPosition.y
-            );
+            const scale = this.paper.scale();
+            var x = event.offsetX - (this.dragStartPosition.x * scale.sx)
+            var y = event.offsetY - (this.dragStartPosition.y * scale.sy)
+            this.paper.translate(x, y);
         }
     }
 
     blankMouseWheel(event, x, y, delta) {
         const scale = this.paper.scale();
+
+        var minScale = 0.25
+        var maxScale = 2
         var e = event.originalEvent;
+        delta = delta * minScale;
 
-        delta = delta * 0.25;
         var offsetX = (e.offsetX || e.clientX - $(this).offset().left);
-
         var offsetY = (e.offsetY || e.clientY - $(this).offset().top);
         var p = this.offsetToLocalPoint(offsetX, offsetY);
         var newScale = scale.sx + delta;
-        console.log(' delta', delta, 'offsetX ', offsetX, 'offsetY', offsetY, 'p', p, 'scale', scale, 'newScale', newScale)
-        if (newScale >= 0.5 && newScale <= 2) {
-            this.paper.setOrigin(0, 0);
+        if (newScale >= minScale && newScale <= maxScale) {
+            this.paper.translate(0, 0);
             this.paper.scale(newScale, newScale, p.x, p.y);
         }
     }
@@ -550,6 +598,222 @@ class Pipeline {
         return svgPoint.matrixTransform(this.paper.viewport.getCTM().inverse());
     }
 
+    totalCpu() {
+        if (this.lastStatus == null) {
+            return '0';
+        }
+        var cpu = 0;
+        for (var node in this.lastStatus.nodes) {
+            node = this.lastStatus.nodes[node];
+            cpu += parseInt(node.cpucapacity);
+        }
+        return cpu;
+    }
+
+    availableCpu() {
+        if (this.lastStatus == null) {
+            return 0.0001;
+        }
+        var cpu = 0;
+        for (var node in this.lastStatus.nodes) {
+            node = this.lastStatus.nodes[node];
+            cpu += parseInt(node.cpurequests);
+        }
+        cpu = (cpu / this.totalCpu()) * 100;
+        if (cpu == 0) { cpu = 0.0001; } else if (cpu >= 100) { cpu = 99.9999; }
+        return  cpu;
+    }
+
+    parseCpu(cpu) {
+        var num = parseFloat(cpu) * 1000;
+        var ident = cpu.replace(/[0-9.]/g, '').trim().toLowerCase().slice(0, 1);
+        if (ident == "m") {
+            num /= 1000;
+        }
+        return num;
+    }
+
+    totalMemory() {
+        if (this.lastStatus == null) {
+            return 1;
+        }
+        var mem = 0;
+        for (var node in this.lastStatus.nodes) {
+            node = this.lastStatus.nodes[node];
+            mem += parseInt(node.memorycapacity);
+        }
+        return mem;
+    }
+
+    availableMemory() {
+        if (this.lastStatus == null) {
+            return 0.0001;
+        }
+        var mem = 0;
+        for (var node in this.lastStatus.nodes) {
+            node = this.lastStatus.nodes[node];
+            mem += parseInt(node.memoryrequests);
+        }
+        mem = (mem / this.totalMemory()) * 100;
+        if (mem == 0) { mem = 0.0001; } else if (mem >= 100) { mem = 99.9999; }
+        return mem;
+    }
+
+    parseMemory(mem) {
+        var SI = ['b', 'kb', 'mb', 'gb', 'tb', 'pb', 'eb', 'zb', 'yb'];
+        var IEC = ['b', 'ki', 'mi', 'gi', 'ti', 'pi', 'ei', 'zi', 'yi'];
+
+        var num = parseFloat(mem);
+        var ident = mem.replace(/[0-9.]/g, '').trim().toLowerCase().slice(0, 2);
+        ident = ident == 'by' ? 'b' : ident;
+        var size, multiplier;
+        if (ident == "") {
+            return num;
+        }
+
+        if ((size = SI.indexOf(ident)) != -1) {
+            multiplier = 1024;
+        } else if((size = IEC.indexOf(ident)) != -1) {
+            multiplier = 1000;
+        } else {
+            ident = ident + "b";
+            size = SI.indexOf(ident);
+            multiplier = 1024;
+        }
+        return num * Math.pow(multiplier, (size +1));
+    }
+
+    requiredResources() {
+        var cpu = 0;
+        var mem = 0;
+        this.graph.getCells().forEach((cell) => {
+            if (cell.attributes.type == 'container.Kubernetes') {
+                var scale = cell.attributes.scale;
+                for (var i=0; i<cell.attributes.embeds.length; i++) {
+                    var id = cell.attributes.embeds[i];
+                    this.graph.getCells().forEach((element) => {
+                        if (element.attributes.id == id && element.attributes.type == 'container.Container') {
+                            cpu += (this.parseCpu(element.attributes.cpu) * scale);
+                            mem += (this.parseMemory(element.attributes.memory) * scale);
+                        }
+                    });
+                }
+            }
+        });
+        cpu = (cpu / this.totalCpu()) * 100;
+        mem = (mem / this.totalMemory()) * 100
+
+        if (cpu == 0) { cpu = 0.0001; } else if (cpu >= 100) { cpu = 99.9999; }
+        if (mem == 0) { mem = 0.0001; } else if (mem >= 100) { mem = 99.9999; }
+        return {
+            cpu: cpu,
+            mem: mem,
+        }
+    }
+
+    /**
+     * Gauge functionality
+     */
+    makeGauges() {
+        var required = this.requiredResources();
+        var rangeLabel = ['0', '100']
+        var arcColors = ['rgb(44, 151, 222)', 'lightgray']
+        Object.keys(this.gauges).forEach((gauge) => {
+            var value;
+            switch (gauge) {
+                case 'pipelineCpu':
+                    value = required.cpu;
+                    break;
+                case 'pipelineMemory':
+                    value = required.mem;
+                    break;
+                case 'availableCpu':
+                    value = this.availableCpu();
+                    rangeLabel = ['100', '0'];
+                    arcColors = ['lightgray', 'rgb(44, 151, 222)'];
+                    break;
+                case 'availableMemory':
+                    value = this.availableMemory();
+                    rangeLabel = ['100', '0'];
+                    arcColors = ['lightgray', 'rgb(44, 151, 222)'];
+                    break;
+            }
+            if (typeof(value) === 'undefined' || isNaN(value)) {
+                value = 0.0001
+            }
+            if (this.gauges[gauge].gauge != null) {
+                this.gauges[gauge].gauge.removeGauge()
+            }
+            var element = document.querySelector('#' + gauge);
+            this.gauges[gauge].gauge = GaugeChart.gaugeChart(element, 150, {
+                hasNeedle: false,
+                needleColor: 'gray',
+                needleUpdateSpeed: 1000,
+                arcColors: arcColors,
+                arcDelimiters: [value],
+                rangeLabel: rangeLabel,
+                centralLabel: this.gauges[gauge].label,
+            });
+            this.gauges[gauge].gauge.updateNeedle(value);
+        });
+    }
+
+
+    showEnvironment() {
+        this.editor = ace.edit("environment-content");
+        this.editor.setTheme("ace/theme/xcode");
+
+        var attributes = this.appelement.attributes;
+        if (!Object.keys(attributes).includes("environment")) {
+            attributes["environment"] = [];
+        }
+
+        if (this.appelement.attributes.environment.length > 0) {
+            this.editor.session.setValue(this.appelement.attributes.environment.join("\n"));
+            this.editor.session.$modified = false;
+        }
+
+        this.editor.session.on('change', function(delta) {
+            this.editorchanged = delta;
+        }.bind(this));
+        this.editor.session.setMode('ace/mode/sh');
+
+        UIkit.modal('#environment', {
+            escClose: false,
+            bgClose: false,
+            stack: true,
+        }).show();
+    }
+
+    /**
+     * Cancel environment editing
+     */
+    cancelEnvironment() {
+        if (this.editorchanged) {
+            UIkit.modal.confirm(
+                'You have unsaved changes. Are you sure you wish to close the editor?',
+                {stack: true}
+            ).then(
+                () => { // ok
+                    this.destroyEditor();
+                },
+                () => { // cancel
+                    this.showEnvironment();
+                }
+            ).catch(e => {});
+            return;
+        }
+        this.destroyEditor();
+    }
+
+    /**
+     * Save script as base64 encoded data into the current element model
+     */
+    saveEnvironment() {
+        this.appelement.attributes.environment = this.editor.getValue().split("\n");
+        this.destroyEditor();
+    }
+
     /**
      * Show the editor dialog
      */
@@ -560,6 +824,14 @@ class Pipeline {
             this.editor.session.setValue(atob(this.appelement.attributes.scriptcontent));
             this.editor.session.$modified = false;
         }
+
+        var details = this.appelement.attributes.gitrepo
+
+        $('#gitrepo').val(details.repo)
+        $('#gitbranch').val(details.branch)
+        $('#gituser').val(details.username)
+        $('#gitpass').val(details.password)
+        $('#gitentry').val(details.entrypoint)
 
         this.editor.session.on('change', function(delta) {
             this.editorchanged = delta;
@@ -578,16 +850,17 @@ class Pipeline {
      */
     cancelScript() {
         if (this.editorchanged) {
-            UIkit.modal.confirm('You have unsaved changes. Are you sure you wish to close the editor?', {stack: true}).then(
+            UIkit.modal.confirm(
+                'You have unsaved changes. Are you sure you wish to close the editor?',
+                {stack: true}
+            ).then(
                 () => { // ok
                     this.destroyEditor();
                 },
                 () => { // cancel
                     this.showEditor();
                 }
-            ).catch(e => {
-                console.log(e);
-            });
+            ).catch(e => {});
             return;
         }
         this.destroyEditor();
@@ -598,6 +871,24 @@ class Pipeline {
      */
     saveScript() {
         this.appelement.attributes.scriptcontent = btoa(this.editor.getValue());
+        this.appelement.attributes.gitrepo = {
+            repo: $('#gitrepo').val(),
+            branch: $('#gitbranch').val(),
+            username: $('#gituser').val(),
+            entrypoint: $('#gitentry').val(),
+        }
+
+        var hashed = this.appelement.attributes.gitrepo.password;
+        var newpass = $('gitpass').val();
+        if (newpass != hashed) {
+            $.post("/api/v1/encrypt", {
+                value: newpass,
+            }, (data, status) => {
+                this.appelement.attributes.gitrepo.password = data.message;
+            }).fail((error) => {
+                handleError(error)
+            })
+        }
         this.destroyEditor();
     }
 
@@ -609,5 +900,7 @@ class Pipeline {
         this.editor = null;
         this.editorchanged = null;
         UIkit.modal('#scriptentry').hide();
+        UIkit.modal('#environment').hide();
+        UIkit.modal('#credentials').hide();
     }
 }

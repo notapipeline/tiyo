@@ -1,3 +1,9 @@
+// Copyright 2021 The Tiyo authors
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 package server
 
 import (
@@ -5,6 +11,7 @@ import (
 	"html/template"
 )
 
+// LoadTemplates : Load HTML template files
 func LoadTemplates(paths ...string) *template.Template {
 	var err error
 	var tpl *template.Template

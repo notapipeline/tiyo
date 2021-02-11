@@ -1,3 +1,9 @@
+// Copyright 2021 The Tiyo authors
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 package flow
 
 import "text/template"
@@ -29,7 +35,7 @@ USER tiyo
 CMD ["/usr/bin/tiyo", "syphon"]`
 
 // Template string for Nginx config files
-var TplNginxConf = template.Must(template.New("").Parse(`
+var tplNginxConf = template.Must(template.New("").Parse(`
 map $http_upgrade $connection_upgrade {
     default upgrade;
     ''      close;

@@ -1,55 +1,70 @@
+/* Copyright 2021 The Tiyo authors
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 class Container {
     $appProperties = $(
         '<div class="applicationProperties properties">'+
-        '<h4>Container properties</h4>'+
-        '<form>'+
-        '  <table>'+
-        '    <tr>'+
-        '      <td><label for="appname">name</label></td>'+
-        '      <td><input id="appname" value="" /></td>'+
-        '    </tr>'+
-        '    <tr>'+
-        '      <td><label for="appcmd">command</label></td>'+
-        '      <td><input id="appcmd" value="" /></td>'+
-        '    </tr>'+
-        '    <tr>'+
-        '      <td><label for="appargs">arguments</label></td>'+
-        '      <td><input id="appargs" value=""></td>'+
-        '    </tr>'+
-        '    <tr>'+
-        '      <td><label for="appversion">version</label></td>'+
-        '      <td><input id="appversion" value=""></td>'+
-        '    </tr>'+
-        '    <tr>'+
-        '      <td><label for="apptimeout">Timeout</label></td>'+
-        '      <td><input id="apptimeout" value=""></td>'+
-        '    </tr>'+
-        '    <tr>'+
-        '      <td><label for="appexposeport">Expose port</label></td>'+
-        '      <td><input id="appexposeport" value="" style="width:50%;">'+
-        '          <label for="appisudp">UDP</label><input type="checkbox" id="appisudp" />'+
-        '      </td>'+
-        '    </tr>'+
-        '    <tr>'+
-        '      <td><label for="appcpu">cpu</label></td>'+
-        '      <td><input id="appcpu" value=""></td>'+
-        '    </tr>'+
-        '    <tr>'+
-        '      <td><label for="appmemory">Memory</label></td>'+
-        '      <td><input id="appmemory" value=""></td>'+
-        '    </tr>'+
-        '    <tr>'+
-        '      <td><label for="appscript">script</label></td>'+
-        '      <td><input type="checkbox" id="appscript" />'+
-        '          <input type="button" id="editappscript" value="edit" onclick="pipeline.showEditor()" />' +
-        '          <input type="hidden" id="scriptcontent" value="" /><td>'+
-        '    </tr>'+
-        '  </table>'+
-        '  <div style="float: right;">'+
-        '    <a class="uk-button-small cancel">cancel</a>'+
-        '    <a class="uk-button-small uk-button-primary done">done</a>'+
-        '  </div>'+
-        '</form>'+
+        '  <h4>Container properties</h4>'+
+        '  <form>'+
+        '    <table>'+
+        '      <tr>'+
+        '        <td><label for="appautostart">autostart</label></td>'+
+        '        <td>'+
+        '          <input type="checkbox" id="appautostart" />'+
+        '        </td>'+
+        '      </tr>'+
+        '      <tr>'+
+        '        <td><label for="appname">name</label></td>'+
+        '        <td><input id="appname" value="" /></td>'+
+        '      </tr>'+
+        '      <tr>'+
+        '        <td><label for="appcmd">command</label></td>'+
+        '        <td><input id="appcmd" value="" /></td>'+
+        '      </tr>'+
+        '      <tr>'+
+        '        <td><label for="appargs">arguments</label></td>'+
+        '        <td><input id="appargs" value=""></td>'+
+        '      </tr>'+
+        '      <tr>'+
+        '        <td><label for="appversion">version</label></td>'+
+        '        <td><input id="appversion" value=""></td>'+
+        '      </tr>'+
+        '      <tr>'+
+        '        <td><label for="apptimeout">timeout</label></td>'+
+        '        <td><input id="apptimeout" value=""></td>'+
+        '      </tr>'+
+        '      <tr>'+
+        '        <td><label for="appexposeport">expose port</label></td>'+
+        '        <td>'+
+        '            <input id="appexposeport" value="" style="width:110px;">'+
+        '            <span><label for="appisudp">UDP</label><input type="checkbox" id="appisudp" /></span>'+
+        '        </td>'+
+        '      </tr>'+
+        '      <tr>'+
+        '        <td><label for="appcpu">cpu</label></td>'+
+        '        <td><input id="appcpu" value=""></td>'+
+        '      </tr>'+
+        '      <tr>'+
+        '        <td><label for="appmemory">memory</label></td>'+
+        '        <td><input id="appmemory" value=""></td>'+
+        '      </tr>'+
+        '      <tr>'+
+        '        <td><label for="appscript">script</label></td>'+
+        '        <td><input type="checkbox" id="appscript" />'+
+        '            <input type="button" id="editappscript" value="edit" onclick="pipeline.showEditor()" />' +
+        '            <input type="button" id="editappenvironment" value="environment" onclick="pipeline.showEnvironment()" />' +
+        '        </td>'+
+        '      </tr>'+
+        '    </table>'+
+        '    <div style="float: right;">'+
+        '      <a class="uk-button-small cancel">cancel</a>'+
+        '      <a class="uk-button-small uk-button-primary done">done</a>'+
+        '    </div>'+
+        '  </form>'+
         '</div>'
     );
 
@@ -98,10 +113,11 @@ class Container {
             view.model.attributes.command = view.model.attr()['.label'].text
         }
 
+        $('#appauto').prop('checked', view.model.attributes.autostart);
         $('#appcmd').val(view.model.attributes.command);
         $('#appargs').val(view.model.attributes.arguments);
         $('#appversion').val(view.model.attributes.version);
-        $('#aptimeout').val(view.model.attributes.timeout);
+        $('#apptimeout').val(view.model.attributes.timeout);
         $('#appexposeport').val(view.model.attributes.exposeport);
         $('#appisudp').prop('checked', view.model.attributes.isudp);
 
@@ -118,11 +134,12 @@ class Container {
             $('#editappscript').prop('disabled', true);
         }
 
+        console.log(event.offsetX);
         element.css({
             "position": "absolute",
             "display": "block",
-            "left": event.offsetX,
-            "top": event.offsetY,
+            "left": x,
+            "top": y,
         });
 
         element.find('.done').click((e) => {
@@ -131,6 +148,7 @@ class Container {
             }
 
             view.model.attr()['.label'].text = $('#appname').val();
+            view.model.attributes.autostart = $('#appauto').prop('checked');
             view.model.attributes.name = $('#appname').val();
             view.model.attributes.command = $('#appcmd').val();
             view.model.attributes.arguments = $('#appargs').val();
@@ -175,6 +193,7 @@ joint.shapes.container.Container = joint.shapes.devs.Model.extend({
         type: 'container.Container',
         perpendicularLinks: true,
 
+        autostart: false,
         name: "",
         lang: "",
         command: "",
@@ -186,9 +205,18 @@ joint.shapes.container.Container = joint.shapes.devs.Model.extend({
         existing: false,
         exposeport: -1,
         isudp: false,
+        environment: [],
 
         cpu: "500m",
         memory: "256Mi",
+
+        gitrepo: {
+            repo: "",
+            branch: "",
+            username: "",
+            password: "",
+            entrypoint: "",
+        },
 
         position: { x: 50, y: 50 },
         size: { width: 50, height: 50 },

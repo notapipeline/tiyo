@@ -1,3 +1,13 @@
+// Copyright 2021 The Tiyo authors
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+// Package pipeline : execution modelling
+// The pipeline package offers mappings from JointJS Diagrams into golang
+// for the purposes of designing a simplified overview of what a kubernetes
+// deployment might look like.
 package pipeline
 
 import (
@@ -8,17 +18,20 @@ import (
 	"io/ioutil"
 	"net/http"
 	"regexp"
+	"strings"
 
-	"github.com/choclab-net/tiyo/config"
+	"github.com/notapipeline/tiyo/config"
 	log "github.com/sirupsen/logrus"
 )
 
+// Pipeline : The principle interface for mapping JointJS to Kubernetes
 type Pipeline struct {
+
 	// The name of the pipeline as specified by the user
 	Name string
 
 	// DNS name is a DNS formatted identifier of the pipeline
-	DnsName string
+	DNSName string
 
 	// The Fully qualified domain name of the pipeline
 	Fqdn string
@@ -40,9 +53,12 @@ type Pipeline struct {
 
 	// Tiyo config object
 	Config *config.Config
+
+	// Global environment settings
+	Environment []string
 }
 
-// Gets the parent (if any) of the current command element
+// GetParent : Gets the parent (if any) of the current command element
 // returns nil if not found
 func (pipeline *Pipeline) GetParent(command *Command) *Container {
 	var id string = command.Parent
@@ -52,7 +68,7 @@ func (pipeline *Pipeline) GetParent(command *Command) *Container {
 	return pipeline.Containers[id]
 }
 
-// Gets the command at a given ID
+// GetCommand : Gets the command at a given ID
 // returns nil if not found
 func (pipeline *Pipeline) GetCommand(id string) *Command {
 	if _, ok := pipeline.Commands[id]; !ok {
@@ -61,7 +77,7 @@ func (pipeline *Pipeline) GetCommand(id string) *Command {
 	return pipeline.Commands[id]
 }
 
-// Get the link at a given ID
+// GetLink : Get the link at a given ID
 // returns nil if not found
 func (pipeline *Pipeline) GetLink(id string) *LinkInterface {
 	if _, ok := pipeline.Links[id]; !ok {
@@ -70,12 +86,12 @@ func (pipeline *Pipeline) GetLink(id string) *LinkInterface {
 	return pipeline.Links[id]
 }
 
-// Get all links feeding into a given command
+// GetLinksTo : Get all links feeding into a given command
 // returns a slice of type *LinkInterface
 func (pipeline *Pipeline) GetLinksTo(command *Command) []*LinkInterface {
 	links := make([]*LinkInterface, 0)
 	for _, link := range pipeline.Links {
-		if (*link).GetLink().Target == command.Id {
+		if (*link).GetLink().Target == command.ID {
 			log.Debug("Link is target ", *link)
 			links = append(links, link)
 		}
@@ -83,12 +99,12 @@ func (pipeline *Pipeline) GetLinksTo(command *Command) []*LinkInterface {
 	return links
 }
 
-// Get all links leading from a given command
+// GetLinksFrom : Get all links leading from a given command
 // Return slice of type *LinkInterface
 func (pipeline *Pipeline) GetLinksFrom(command *Command) []*LinkInterface {
 	links := make([]*LinkInterface, 0)
 	for _, link := range pipeline.Links {
-		if (*link).GetLink().Source == command.Id {
+		if (*link).GetLink().Source == command.ID {
 			log.Debug("Link is source ", *link)
 			links = append(links, link)
 		}
@@ -96,7 +112,7 @@ func (pipeline *Pipeline) GetLinksFrom(command *Command) []*LinkInterface {
 	return links
 }
 
-// Gets a list of all IDs which have no inputs from other Command elements
+// GetStartIds : Gets a list of all IDs which have no inputs from other Command elements
 // return slice of type string
 func (pipeline *Pipeline) GetStartIds() []string {
 	linkSources := make([]string, 0)
@@ -129,7 +145,7 @@ func (pipeline *Pipeline) GetStartIds() []string {
 	return startingPoints
 }
 
-// Gets all starting point commands
+// GetStart : Gets all starting point commands
 //
 // Starting commands are commands which either have no
 // links leading into them, or their links have a source whose type is
@@ -150,7 +166,7 @@ func (pipeline *Pipeline) GetStart() []*Command {
 	return commands
 }
 
-// Get all command ids at the end of the pipeline
+// GetEndIds : Get all command ids at the end of the pipeline
 //
 // return []string
 func (pipeline *Pipeline) GetEndIds() []string {
@@ -180,46 +196,46 @@ func (pipeline *Pipeline) GetEndIds() []string {
 	return endPoints
 }
 
-// Get all IDs of commands following the present command
+// GetNextID : Get all IDs of commands following the present command
 //
 // return []string slice of IDs
-func (pipeline *Pipeline) GetNextId(after *Command) []string {
+func (pipeline *Pipeline) GetNextID(after *Command) []string {
 	targets := make([]string, 0)
 	for _, link := range pipeline.Links {
-		if (*link).GetLink().Source == after.Id {
+		if (*link).GetLink().Source == after.ID {
 			targets = append(targets, (*link).GetLink().Target)
 		}
 	}
 	return targets
 }
 
-// Get the next command[s] following the present command
+// GetNext : Get the next command[s] following the present command
 // return []*Command
 func (pipeline *Pipeline) GetNext(after *Command) []*Command {
-	var nextIds = pipeline.GetNextId(after)
+	var nextIDs = pipeline.GetNextID(after)
 	targets := make([]*Command, 0)
-	for i := 0; i < len(nextIds); i++ {
-		targets = append(targets, pipeline.Commands[nextIds[i]])
+	for i := 0; i < len(nextIDs); i++ {
+		targets = append(targets, pipeline.Commands[nextIDs[i]])
 	}
 	return targets
 }
 
-// Get the previous ID[s]
+// GetPreviousID : Get the previous ID[s]
 // return []string
-func (pipeline *Pipeline) GetPreviousId(before *Command) []string {
+func (pipeline *Pipeline) GetPreviousID(before *Command) []string {
 	sources := make([]string, 0)
 	for _, link := range pipeline.Links {
-		if (*link).GetLink().Target == before.Id {
+		if (*link).GetLink().Target == before.ID {
 			sources = append(sources, (*link).GetLink().Source)
 		}
 	}
 	return sources
 }
 
-// Get previous command[s]
+// GetPrev : Get previous command[s]
 // return []*Command
 func (pipeline *Pipeline) GetPrev(before *Command) []*Command {
-	var priorIds = pipeline.GetPreviousId(before)
+	var priorIds = pipeline.GetPreviousID(before)
 	sources := make([]*Command, 0)
 	for i := 0; i < len(priorIds); i++ {
 		if _, ok := pipeline.Commands[priorIds[i]]; ok {
@@ -229,6 +245,8 @@ func (pipeline *Pipeline) GetPrev(before *Command) []*Command {
 	return sources
 }
 
+// IsConvergence : Is this path a convergence point
+//
 // A convergence point is where multiple paths come together
 // into a single command. Such points are often bottlenecks
 // for data-flow, or offer services such as API or storage
@@ -236,23 +254,26 @@ func (pipeline *Pipeline) GetPrev(before *Command) []*Command {
 // instance and may cause the pipeline to wait for feed paths
 // to complete before continuing.
 func (pipeline *Pipeline) IsConvergence(command *Command) bool {
-	return len(pipeline.GetPreviousId(command)) > 1
+	return len(pipeline.GetPreviousID(command)) > 1
 }
 
+// GetConnection : Get the link between two instances
 func (pipeline *Pipeline) GetConnection(source *Command, dest *Command) *LinkInterface {
 	for _, link := range pipeline.Links {
-		if (*link).GetLink().Source == source.Id && (*link).GetLink().Target == dest.Id {
+		if (*link).GetLink().Source == source.ID && (*link).GetLink().Target == dest.ID {
 			return link
 		}
 	}
 	return nil
 }
 
+// Matcher : A container for regex matches
 type Matcher struct {
 	Source  string
 	Pattern *regexp.Regexp
 }
 
+// linkSources : Get the source of a set of links
 func (pipeline *Pipeline) linkSources(links []*LinkInterface) []Matcher {
 	matchers := make([]Matcher, 0)
 	all, _ := regexp.Compile(".*")
@@ -265,11 +286,11 @@ func (pipeline *Pipeline) linkSources(links []*LinkInterface) []Matcher {
 			match := Matcher{}
 			var path string = (*link).(*PathLink).Path
 			if path == "" || (*link).(*PathLink).Path == pipeline.BucketName {
-				sourceId := (*link).GetLink().Source
-				if _, ok := pipeline.Commands[sourceId]; ok {
-					path = pipeline.Commands[sourceId].Name
-				} else if _, ok := pipeline.Sources[sourceId]; ok {
-					path = pipeline.Sources[sourceId].Name
+				sourceID := (*link).GetLink().Source
+				if _, ok := pipeline.Commands[sourceID]; ok {
+					path = pipeline.Commands[sourceID].Name
+				} else if _, ok := pipeline.Sources[sourceID]; ok {
+					path = pipeline.Sources[sourceID].Name
 				}
 				if path == pipeline.BucketName {
 					// empty path if we match bucket name
@@ -298,7 +319,7 @@ func (pipeline *Pipeline) linkSources(links []*LinkInterface) []Matcher {
 	return matchers
 }
 
-// Gets a unique list of Match items
+// Unique : Gets a unique list of Match items
 func (pipeline *Pipeline) Unique(matchers []Matcher) []Matcher {
 	keys := make(map[string]bool)
 	list := make([]Matcher, 0)
@@ -314,6 +335,7 @@ func (pipeline *Pipeline) Unique(matchers []Matcher) []Matcher {
 	return list
 }
 
+// GetPathSources :
 func (pipeline *Pipeline) GetPathSources(source *Command) []string {
 	links := pipeline.GetLinksTo(source)
 	sources := make([]string, 0)
@@ -324,7 +346,7 @@ func (pipeline *Pipeline) GetPathSources(source *Command) []string {
 	return sources
 }
 
-// Gets a list of directories/files to watch for events.
+// WatchItems : Gets a list of directories/files to watch for events.
 // Does not create.
 //
 // If path is empty, takes the name of the upstream command
@@ -342,28 +364,46 @@ func (pipeline *Pipeline) WatchItems() []Matcher {
 	return watch
 }
 
-// Get a command id from its final image name
-func (pipeline *Pipeline) CommandFromImageName(image string) *Command {
-	for _, command := range pipeline.Commands {
-		tagname := pipeline.Config.Docker.Primary + "/" + command.GetContainer(true)
-		if tagname == image {
+// CommandFromContainerName : Get a command id from its final image name
+func (pipeline *Pipeline) CommandFromContainerName(kubernetesGroup string, image string) *Command {
+	var instances []*Command
+	for _, group := range pipeline.Containers {
+		if strings.HasSuffix(kubernetesGroup, group.Name) {
+			instances = group.GetChildren()
+		}
+	}
+
+	for _, command := range instances {
+		if command.Name == image {
 			return command
 		}
 	}
 	return nil
 }
 
+// ContainerFromServiceName : Get a container for a given kubernetes service
+func (pipeline *Pipeline) ContainerFromServiceName(serviceName string) *Container {
+	for _, group := range pipeline.Containers {
+		if strings.HasSuffix(serviceName, group.Name) {
+			return group
+		}
+	}
+	return nil
+}
+
+// GetPipeline : Load a pipeline by name from the bolt store and return a new pipeline
 func GetPipeline(config *config.Config, name string) (*Pipeline, error) {
 	pipeline := Pipeline{}
 	pipeline.Name = name
-	pipeline.DnsName = Sanitize(name, "-")
-	pipeline.Fqdn = pipeline.DnsName + "." + config.DnsName
+	pipeline.DNSName = Sanitize(name, "-")
+	pipeline.Fqdn = pipeline.DNSName + "." + config.DNSName
 	pipeline.BucketName = Sanitize(name, "_")
 	pipeline.Commands = make(map[string]*Command)
 	pipeline.Links = make(map[string]*LinkInterface)
 	pipeline.Containers = make(map[string]*Container)
 	pipeline.Sources = make(map[string]*Source)
 	pipeline.Config = config
+	pipeline.Environment = make([]string, 0)
 
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: config.UseInsecureTLS}
 	// Do not use pipeline.Name here - that has been Sanitized and will not match
@@ -388,15 +428,23 @@ func GetPipeline(config *config.Config, name string) (*Pipeline, error) {
 		return nil, err
 	}
 
-	pipelineJson, err := base64.StdEncoding.DecodeString(string(message.Message))
+	pipelineJSON, err := base64.StdEncoding.DecodeString(string(message.Message))
 	if err != nil {
 		return nil, err
 	}
 
 	var content map[string]interface{}
-	err = json.Unmarshal(pipelineJson, &content)
+	err = json.Unmarshal(pipelineJSON, &content)
 	if err != nil {
 		return nil, err
+	}
+
+	if environment, ok := content["environment"]; ok {
+		env := environment.([]interface{})
+		pipeline.Environment = make([]string, 0)
+		for _, item := range env {
+			pipeline.Environment = append(pipeline.Environment, item.(string))
+		}
 	}
 
 	// issue#18
@@ -415,22 +463,32 @@ func GetPipeline(config *config.Config, name string) (*Pipeline, error) {
 			if pipeline.Config.Docker.Registry != "" {
 				command.Tag = pipeline.Config.Docker.Registry + "/" + command.Tag
 			}
-			pipeline.Commands[command.Id] = command
+			pipeline.AddEnv(command)
+			pipeline.Commands[command.ID] = command
 		case "container.Kubernetes":
 			container := NewContainer(&pipeline, cell)
-			pipeline.Containers[container.Id] = container
+			pipeline.Containers[container.ID] = container
 		case "container.Source":
 			source := NewSource(cell)
-			pipeline.Sources[source.Id] = source
+			pipeline.Sources[source.ID] = source
 		case "link":
 			link := NewLink(cell)
 			switch link.(type) {
 			case *PathLink:
-				pipeline.Links[link.(*PathLink).Id] = &link
+				pipeline.Links[link.(*PathLink).ID] = &link
 			case *PortLink:
-				pipeline.Links[link.(*PortLink).Id] = &link
+				pipeline.Links[link.(*PortLink).ID] = &link
 			}
 		}
 	}
 	return &pipeline, nil
+}
+
+// AddEnv : Add the full pipeline environment to a command
+// This is normally called by flow immediatly prior to the command
+// being sent out to the container. This will help keep memory
+// footprint smaller during standard execution when dealing with
+// large pipeline environments and/or multiple pipelines on one flow
+func (pipeline *Pipeline) AddEnv(command *Command) {
+	command.Environment = append(command.Environment, pipeline.Environment...)
 }

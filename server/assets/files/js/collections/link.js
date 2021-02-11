@@ -1,3 +1,10 @@
+/* Copyright 2021 The Tiyo authors
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 /**
  * Utility function for normalizing marker's path data.
  * Translates the center of an arbitrary path at <0 + offset,0>.
@@ -82,7 +89,7 @@ class Link {
         '</form>'+
         '</div>'
     );
-    
+
     groupType = false;
 
     constructor() {
@@ -120,7 +127,7 @@ class Link {
             elem = null;
         });
     }
-    
+
     close() {
         $('.linkProperties').each( function (_, el) {
             $(el).find('.done').off('click');
@@ -130,7 +137,7 @@ class Link {
             });
         });
     }
-    
+
     /**
      * Show properties on right click against a link
      */
@@ -157,8 +164,8 @@ class Link {
         element.css({
             "position": "absolute",
             "display": "block",
-            "left": event.offsetX,
-            "top": event.offsetY,
+            "left": x,
+            "top": y,
         });
 
         element.find('.done').click((e) => {
@@ -179,20 +186,16 @@ class Link {
             pipeline.save();
             var done = element.find('.done');
             done.off('click');
-            element = null;
-            attributes = null;
         });
 
         element.find('.cancel').click((e) => {
-            $(this.offsetParent).css({
+            element.css({
                 "display": "none",
             });
-            $(this).off('click');
-            element = null;
-            attributes = null;
+            element.find('.cancel').off('click');
         });
     }
-    
+
     tcp() {
         return new joint.dia.Link({
             attrs: {
@@ -214,7 +217,7 @@ class Link {
             },
         });
     }
-    
+
     udp() {
         return new joint.dia.Link({
             attrs: {
@@ -236,7 +239,7 @@ class Link {
             },
         });
     }
-    
+
     socket() {
         return new joint.dia.Link({
             attrs: {
@@ -256,7 +259,7 @@ class Link {
             },
         });
     }
-    
+
     file() {
         return new joint.dia.Link({
             attrs: {

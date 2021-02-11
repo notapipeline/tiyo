@@ -1,3 +1,10 @@
+// Copyright 2021 The Tiyo authors
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+// Package flow : API subsystem for flow app
 package flow
 
 import (
@@ -5,30 +12,41 @@ import (
 	"os"
 	"strings"
 
-	"github.com/choclab-net/tiyo/config"
-	"github.com/choclab-net/tiyo/server"
+	"github.com/notapipeline/tiyo/config"
+	"github.com/notapipeline/tiyo/server"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 )
 
-type FlowApi struct {
+// API Structure for the flow api
+type API struct {
+
+	// The flow API can hold multiple pipelines but only one copy
+	// of each individual pipeline.
+	// If multiple copies of the same pipeline are required, multiple
+	// flow instances need to be executed although this will lead to
+	// issues with the current queue implementation
 	Instances map[string]Flow
-	config    *config.Config
+
+	// Config for the flow api
+	config *config.Config
 }
 
-type FlowApiInstances struct {
-	Flow *Flow
-}
-
-func NewFlowApi() *FlowApi {
-	api := FlowApi{}
+// NewAPI Create a new Flow API object
+func NewAPI() *API {
+	api := API{}
 	api.Instances = make(map[string]Flow)
 	return &api
 }
 
-func (flowApi *FlowApi) Serve(config *config.Config) {
+// Serve the API over HTTP
+//
+// Flow api offers integrations for the Syphon application to
+// communicate and for assemble to trigger the application
+// deployments.
+func (api *API) Serve(config *config.Config) {
 	log.Info("starting flow server - ", config.FlowServer())
-	flowApi.config = config
+	api.config = config
 	mode := os.Getenv("TIYO_LOG")
 	if mode == "" {
 		mode = "production"
@@ -40,12 +58,24 @@ func (flowApi *FlowApi) Serve(config *config.Config) {
 
 	var err error
 	server := gin.Default()
-	server.POST("/api/v1/register", flowApi.Register)
-	server.POST("/api/v1/execute", flowApi.Execute)
-	server.POST("/api/v1/status", flowApi.Status)
-	server.POST("/api/v1/start", flowApi.Start)
-	server.POST("/api/v1/stop", flowApi.Stop)
-	server.POST("/api/v1/destroy", flowApi.Destroy)
+
+	// Used by syphon to regiser a container as ready/busy
+	server.POST("/api/v1/register", api.Register)
+
+	// Execute the pipeline and build infrastructure
+	server.POST("/api/v1/execute", api.Execute)
+
+	// Get the status
+	server.POST("/api/v1/status", api.Status)
+
+	// Start the queue
+	server.POST("/api/v1/start", api.Start)
+
+	// Stop the queue
+	server.POST("/api/v1/stop", api.Stop)
+
+	// destroy all infrastructure related to the pipeline
+	server.POST("/api/v1/destroy", api.Destroy)
 
 	host := fmt.Sprintf("%s:%d", config.Flow.Host, config.Flow.Port)
 	log.Info(host)
@@ -61,14 +91,20 @@ func (flowApi *FlowApi) Serve(config *config.Config) {
 	}
 }
 
-func (flowApi *FlowApi) Register(c *gin.Context) {
+// Register : Endpoint for Syphon executors to register their current status
+//
+// When the status parameter is sent and is set to ready, if a command is
+// available on the queue, this is sent back to syphon.
+//
+// If syphon registers busy, no command should be sent back.
+func (api *API) Register(c *gin.Context) {
 	var flow *Flow
-	var request map[string]interface{} = flowApi.podRequest(c)
+	var request map[string]interface{} = api.podRequest(c)
 	if request == nil {
 		return
 	}
 
-	if flow = flowApi.flowFromPodName(request["pod"].(string)); flow == nil || flow.Queue == nil {
+	if flow = api.flowFromPodName(request["pod"].(string)); flow == nil || flow.Queue == nil {
 		result := server.Result{
 			Code:    404,
 			Result:  "Error",
@@ -82,7 +118,8 @@ func (flowApi *FlowApi) Register(c *gin.Context) {
 	c.JSON(result.Code, result)
 }
 
-func (flowApi *FlowApi) podRequest(c *gin.Context) map[string]interface{} {
+// podRequest : Unpack a request from a pod and validate the input returning a map containing the verified fields
+func (api *API) podRequest(c *gin.Context) map[string]interface{} {
 	expected := []string{"pod", "container", "status"}
 	request := make(map[string]interface{})
 	if err := c.ShouldBind(&request); err != nil {
@@ -90,7 +127,7 @@ func (flowApi *FlowApi) podRequest(c *gin.Context) map[string]interface{} {
 			request[expect] = c.PostForm(expect)
 		}
 	}
-	if ok, missing := flowApi.checkFields(expected, request); !ok {
+	if ok, missing := api.checkFields(expected, request); !ok {
 		result := server.NewResult()
 		result.Code = 400
 		result.Result = "Error"
@@ -101,24 +138,26 @@ func (flowApi *FlowApi) podRequest(c *gin.Context) map[string]interface{} {
 	return request
 }
 
-func (flowApi *FlowApi) flowFromPodName(podName string) *Flow {
-	for _, flow := range flowApi.Instances {
-		if podName == flow.Pipeline.DnsName || strings.HasPrefix(podName, flow.Pipeline.DnsName) {
+// flowFromPodName : Map a pod name back to a flow instance
+func (api *API) flowFromPodName(podName string) *Flow {
+	for _, flow := range api.Instances {
+		if podName == flow.Pipeline.DNSName || strings.HasPrefix(podName, flow.Pipeline.DNSName) {
 			return &flow
 		}
 	}
 
+	log.Info("Flow for ", podName, " not loaded - loading new.")
 	var flow *Flow
-	if flow = flow.Find(podName, flowApi.config); flow != nil {
-		flowApi.Instances[flow.Name] = *flow
+	if flow = flow.Find(podName, api.config); flow != nil {
+		api.Instances[flow.Name] = *flow
 		return flow
 	}
 	return nil
 }
 
-// Checks a posted request for all expected fields
+// checkFields : Checks a posted request for all expected fields
 // return true if fields are ok, false otherwise
-func (flowApi *FlowApi) checkFields(expected []string, request map[string]interface{}) (bool, []string) {
+func (api *API) checkFields(expected []string, request map[string]interface{}) (bool, []string) {
 	log.Debug(request)
 	missing := make([]string, 0)
 	for _, key := range expected {
@@ -129,7 +168,8 @@ func (flowApi *FlowApi) checkFields(expected []string, request map[string]interf
 	return len(missing) == 0, missing
 }
 
-func (flowApi *FlowApi) pipelineFromContext(c *gin.Context, rebind bool) *Flow {
+// pipelineFromContext : Get the Pipeline instance from the current Gin context
+func (api *API) pipelineFromContext(c *gin.Context, rebind bool) *Flow {
 	result := server.Result{
 		Code:   400,
 		Result: "Error",
@@ -157,10 +197,10 @@ func (flowApi *FlowApi) pipelineFromContext(c *gin.Context, rebind bool) *Flow {
 	)
 
 	log.Debug("Finding flow for ", pipelineName)
-	if flow, ok = flowApi.Instances[pipelineName]; !ok || rebind {
-		log.Debug("Setting up Flow due to ", ok, rebind)
+	if flow, ok = api.Instances[pipelineName]; !ok {
+		log.Info("Loading new instance of pipeline ", pipelineName)
 		newFlow := NewFlow()
-		newFlow.Config = flowApi.config
+		newFlow.Config = api.config
 
 		if !newFlow.Setup(pipelineName) {
 			log.Error("Failed to configure flow for pipeline ", pipelineName)
@@ -172,23 +212,31 @@ func (flowApi *FlowApi) pipelineFromContext(c *gin.Context, rebind bool) *Flow {
 			c.JSON(result.Code, result)
 			return nil
 		}
-		flowApi.Instances[pipelineName] = *newFlow
-		flow = flowApi.Instances[pipelineName]
+		api.Instances[pipelineName] = *newFlow
+		flow = api.Instances[pipelineName]
+		flow.Start()
+	}
+
+	if rebind {
+		log.Info("Rebinding pipeline ", pipelineName)
+		flow.LoadPipeline(pipelineName)
 	}
 
 	return &flow
 }
 
-func (flowApi *FlowApi) Destroy(c *gin.Context) {
+// Destroy : Destroy all infrastructure related to the current pipeline
+func (api *API) Destroy(c *gin.Context) {
 	var flow *Flow
 	log.Debug("Destroying pipeline")
-	if flow = flowApi.pipelineFromContext(c, true); flow == nil {
+	if flow = api.pipelineFromContext(c, false); flow == nil {
 		log.Error("Not destroying pipeline - failed")
 		return
 	}
 	if flow.IsExecuting {
 		flow.Stop()
 	}
+	log.Warn("Triggering flow.Destroy()")
 	go flow.Destroy()
 	result := server.Result{
 		Code:    202,
@@ -198,10 +246,11 @@ func (flowApi *FlowApi) Destroy(c *gin.Context) {
 	c.JSON(result.Code, result)
 }
 
-func (flowApi *FlowApi) Stop(c *gin.Context) {
+// Stop : Stop events being retrieved from the queue and new events being added
+func (api *API) Stop(c *gin.Context) {
 	var flow *Flow
 	log.Debug("Stopping pipeline")
-	if flow = flowApi.pipelineFromContext(c, true); flow == nil {
+	if flow = api.pipelineFromContext(c, true); flow == nil {
 		log.Error("Not stopping pipeline - failed")
 		return
 	}
@@ -216,10 +265,11 @@ func (flowApi *FlowApi) Stop(c *gin.Context) {
 	c.JSON(result.Code, result)
 }
 
-func (flowApi *FlowApi) Start(c *gin.Context) {
+// Start : Allow events to be picked up from the queue and new events to be added
+func (api *API) Start(c *gin.Context) {
 	var flow *Flow
 	log.Debug("Starting pipeline")
-	if flow = flowApi.pipelineFromContext(c, true); flow == nil {
+	if flow = api.pipelineFromContext(c, true); flow == nil {
 		log.Error("Not starting - failed")
 		return
 	}
@@ -234,10 +284,11 @@ func (flowApi *FlowApi) Start(c *gin.Context) {
 	c.JSON(result.Code, result)
 }
 
-func (flowApi *FlowApi) Execute(c *gin.Context) {
+// Execute : [Re]Create all infrastructure associated with the current pipeline
+func (api *API) Execute(c *gin.Context) {
 	var flow *Flow
 	log.Debug("Executing pipeline")
-	if flow = flowApi.pipelineFromContext(c, true); flow == nil {
+	if flow = api.pipelineFromContext(c, true); flow == nil {
 		log.Error("Not executing pipeline - failed")
 		return
 	}
@@ -246,17 +297,24 @@ func (flowApi *FlowApi) Execute(c *gin.Context) {
 		// Execute runs in goroutine to avoid blocking server
 		go flow.Execute()
 	}
-	flowApi.checkStatus(c, false)
+	api.checkStatus(c, false)
 }
 
-// Get the status of the executing pipeline
-func (flowApi *FlowApi) Status(c *gin.Context) {
-	flowApi.checkStatus(c, true)
+// Status : Get the status of the executing pipeline
+func (api *API) Status(c *gin.Context) {
+	api.checkStatus(c, true)
 }
 
-func (flowApi *FlowApi) checkStatus(c *gin.Context, rebind bool) {
+// checkStatus : Check all infrastructure and get the status of resources
+//
+// Sends back a map containing information about:
+//   - Nodes
+//   - Pods
+//   - Containers
+//   - Sets (groups)
+func (api *API) checkStatus(c *gin.Context, rebind bool) {
 	var flow *Flow
-	if flow = flowApi.pipelineFromContext(c, true); flow == nil {
+	if flow = api.pipelineFromContext(c, rebind); flow == nil {
 		log.Error("Not sending pipeline status - failed")
 		return
 	}
@@ -264,6 +322,7 @@ func (flowApi *FlowApi) checkStatus(c *gin.Context, rebind bool) {
 	response := make(map[string]interface{})
 	response["status"] = "Ready"
 	response["groups"] = make(map[string]interface{})
+	response["nodes"] = flow.Kubernetes.GetNodes()
 
 	var notready = false
 
@@ -271,7 +330,7 @@ func (flowApi *FlowApi) checkStatus(c *gin.Context, rebind bool) {
 	groups := make(map[string]interface{})
 	for id, container := range flow.Pipeline.Containers {
 		group := make(map[string]interface{})
-		podState, err := flow.Kubernetes.PodStatus(strings.Join([]string{flow.Pipeline.DnsName, container.Name}, "-"))
+		podState, err := flow.Kubernetes.PodStatus(strings.Join([]string{flow.Pipeline.DNSName, container.Name}, "-"))
 		if err != nil {
 			log.Error(err)
 			continue

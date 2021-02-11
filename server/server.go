@@ -1,11 +1,10 @@
-/**
- * A webserver base GUI and API for managing a server.ApiDB
- *
- * @author Martin Proffitt <choclab-net@choclab.net>
- *
- * Build:
- * go-bindata-assetfs -o web_static.go web/... && go build .
- */
+// Copyright 2021 The Tiyo authors
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+// Package server : A webserver base GUI and API for managing a server.APIDB
 package server
 
 import (
@@ -14,7 +13,7 @@ import (
 	"os"
 	"path"
 
-	"github.com/choclab-net/tiyo/config"
+	"github.com/notapipeline/tiyo/config"
 	"github.com/gin-contrib/multitemplate"
 	"github.com/gin-contrib/static"
 	"github.com/gin-gonic/gin"
@@ -22,18 +21,32 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const version = "v0.1.0"
-
+// Server : The principle server component
 type Server struct {
-	Dbname  string
-	Port    string
+
+	// The name of the database file
+	Dbname string
+
+	// The port to listen on
+	Port string
+
+	// The address of the server component
 	Address string
-	Engine  *gin.Engine
-	Api     *Api
-	Flags   *flag.FlagSet
-	Config  *config.Config
+
+	// The GIN HTTP Engine
+	Engine *gin.Engine
+
+	// The API handling requests
+	API *API
+
+	// Flag set for initialising the assemble server component
+	Flags *flag.FlagSet
+
+	// Primary configuration of the assemble server component
+	Config *config.Config
 }
 
+// NewServer : Create a new Server instance
 func NewServer() *Server {
 	server := Server{}
 	mode := os.Getenv("TIYO_LOG")
@@ -51,6 +64,7 @@ func NewServer() *Server {
 	return &server
 }
 
+// Init : initialises the server environment
 func (server *Server) Init() {
 	// Try to load from config file first
 	server.Dbname = server.Config.Dbname
@@ -80,20 +94,21 @@ func (server *Server) Init() {
 	}
 }
 
+// Run : runs the server component when activated via main
 func (server *Server) Run() int {
-	log.Info("starting server.Apidb-browser..")
+	log.Info("starting server.APIdb-browser..")
 
 	var (
 		err error
 		db  string = server.Config.DbDir + "/" + server.Dbname
 	)
 
-	server.Api, err = NewApi(db, server.Config)
+	server.API, err = NewAPI(db, server.Config)
 	if err != nil {
 		fmt.Println(err)
 		return 1
 	}
-	bfs := GetBFS("server/assets/files")
+	bfs := GetBinFileSystem("server/assets/files")
 	server.Engine.Use(static.Serve("/static", bfs))
 
 	render := multitemplate.New()
@@ -107,42 +122,44 @@ func (server *Server) Run() int {
 	})
 
 	// page methods
-	server.Engine.GET("/", server.Api.Index)
-	server.Engine.GET("/pipeline", server.Api.Index)
-	server.Engine.GET("/scan", server.Api.Index)
-	server.Engine.GET("/scan/:bucket", server.Api.Index)
-	server.Engine.GET("/buckets", server.Api.Index)
+	server.Engine.GET("/", server.API.Index)
+	server.Engine.GET("/pipeline", server.API.Index)
+	server.Engine.GET("/scan", server.API.Index)
+	server.Engine.GET("/scan/:bucket", server.API.Index)
+	server.Engine.GET("/buckets", server.API.Index)
 
 	// api methods
-	server.Engine.GET("/api/v1/bucket", server.Api.Buckets)
-	server.Engine.GET("/api/v1/bucket/:bucket/:child", server.Api.Get)
-	server.Engine.GET("/api/v1/bucket/:bucket/:child/*key", server.Api.Get)
+	server.Engine.GET("/api/v1/bucket", server.API.Buckets)
+	server.Engine.GET("/api/v1/bucket/:bucket/:child", server.API.Get)
+	server.Engine.GET("/api/v1/bucket/:bucket/:child/*key", server.API.Get)
 
-	server.Engine.PUT("/api/v1/bucket", server.Api.Put)
-	server.Engine.POST("/api/v1/bucket", server.Api.CreateBucket)
+	server.Engine.PUT("/api/v1/bucket", server.API.Put)
+	server.Engine.POST("/api/v1/bucket", server.API.CreateBucket)
 
-	server.Engine.DELETE("/api/v1/bucket/:bucket", server.Api.DeleteBucket)
-	server.Engine.DELETE("/api/v1/bucket/:bucket/:child", server.Api.DeleteKey)
-	server.Engine.DELETE("/api/v1/bucket/:bucket/:child/*key", server.Api.DeleteKey)
+	server.Engine.DELETE("/api/v1/bucket/:bucket", server.API.DeleteBucket)
+	server.Engine.DELETE("/api/v1/bucket/:bucket/:child", server.API.DeleteKey)
+	server.Engine.DELETE("/api/v1/bucket/:bucket/:child/*key", server.API.DeleteKey)
 
-	server.Engine.GET("/api/v1/containers", server.Api.Containers)
+	server.Engine.GET("/api/v1/containers", server.API.Containers)
 	server.Engine.GET("/api/v1/collections/:collection", bfs.Collection)
 
-	server.Engine.GET("/api/v1/scan/:bucket", server.Api.PrefixScan)
-	server.Engine.GET("/api/v1/scan/:bucket/:child", server.Api.PrefixScan)
-	server.Engine.GET("/api/v1/scan/:bucket/:child/*key", server.Api.PrefixScan)
+	server.Engine.GET("/api/v1/scan/:bucket", server.API.PrefixScan)
+	server.Engine.GET("/api/v1/scan/:bucket/:child", server.API.PrefixScan)
+	server.Engine.GET("/api/v1/scan/:bucket/:child/*key", server.API.PrefixScan)
 
-	server.Engine.GET("/api/v1/count/:bucket", server.Api.KeyCount)
-	server.Engine.GET("/api/v1/count/:bucket/*child", server.Api.KeyCount)
+	server.Engine.GET("/api/v1/count/:bucket", server.API.KeyCount)
+	server.Engine.GET("/api/v1/count/:bucket/*child", server.API.KeyCount)
 
-	server.Engine.GET("/api/v1/popqueue/:pipeline/:key", server.Api.PopQueue)
-	server.Engine.POST("/api/v1/perpetualqueue", server.Api.PerpetualQueue)
+	server.Engine.GET("/api/v1/popqueue/:pipeline/:key", server.API.PopQueue)
+	server.Engine.POST("/api/v1/perpetualqueue", server.API.PerpetualQueue)
 
-	server.Engine.GET("/api/v1/status/:pipeline", server.Api.FlowStatus)
-	server.Engine.POST("/api/v1/execute", server.Api.ExecuteFlow)
-	server.Engine.POST("/api/v1/startflow", server.Api.StartFlow)
-	server.Engine.POST("/api/v1/stopflow", server.Api.StopFlow)
-	server.Engine.POST("/api/v1/destroyflow", server.Api.DestroyFlow)
+	server.Engine.GET("/api/v1/status/:pipeline", server.API.FlowStatus)
+	server.Engine.POST("/api/v1/execute", server.API.ExecuteFlow)
+	server.Engine.POST("/api/v1/startflow", server.API.StartFlow)
+	server.Engine.POST("/api/v1/stopflow", server.API.StopFlow)
+	server.Engine.POST("/api/v1/destroyflow", server.API.DestroyFlow)
+	server.Engine.POST("/api/v1/encrypt", server.API.Encrypt)
+	server.Engine.POST("/api/v1/decrypt", server.API.Decrypt)
 
 	host := fmt.Sprintf("%s:%d", server.Config.Assemble.Host, server.Config.Assemble.Port)
 	log.Info(host)

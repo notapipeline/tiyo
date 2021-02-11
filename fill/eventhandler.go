@@ -1,3 +1,9 @@
+// Copyright 2021 The Tiyo authors
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 package fill
 
 import (
@@ -8,26 +14,42 @@ import (
 	"net/http"
 	"path/filepath"
 
-	"github.com/choclab-net/tiyo/config"
+	"github.com/notapipeline/tiyo/config"
 	"github.com/rjeczalik/notify"
 	log "github.com/sirupsen/logrus"
 )
 
-const (
-	MAX_CLIENTS int = 100
-)
+// MAXCLIENTS : The maximum number of http clients created by fill application
+const MAXCLIENTS int = 100
 
+// A channel to write requests into to be handled by the client goroutine
 var requests chan *http.Request = make(chan *http.Request)
 
+// FilledFileEvent : A file event to be sent to AssembleServer
 type FilledFileEvent struct {
+
+	// The name of the file being actioned
 	Filename string
-	Bucket   string
-	Opened   bool
-	Closed   bool
-	Deleted  bool
-	Config   *config.Config
+
+	// The bucket to write into
+	Bucket string
+
+	// Is this a file open event
+	Opened bool
+
+	// Is this a file close event
+	Closed bool
+
+	// Is this a file deleted event
+	Deleted bool
+
+	// the configuration object for the fill command
+	// Can be a reduced config containing only assemble and
+	// the sequence base directory
+	Config *config.Config
 }
 
+// NewFillEvent : Create a new fill event stream
 func NewFillEvent(config *config.Config, bucket string, filename string) *FilledFileEvent {
 	event := FilledFileEvent{
 		Bucket:   bucket,
@@ -40,6 +62,12 @@ func NewFillEvent(config *config.Config, bucket string, filename string) *Filled
 	return &event
 }
 
+// State : Set the state of the event based on the inotify event
+//
+// Only monitoring:
+//   - InOpen
+//   - InCloseWrite
+//   - Remove
 func (event *FilledFileEvent) State(notification notify.Event) *FilledFileEvent {
 	switch notification {
 	case notify.InOpen:
@@ -66,9 +94,10 @@ func (event *FilledFileEvent) State(notification notify.Event) *FilledFileEvent 
 	return event
 }
 
+// Store : Store the event in the BoltDB
 func (event *FilledFileEvent) Store() {
 	server := event.Config.AssembleServer()
-	data := event.JsonBody(event.Bucket, event.Filename)
+	data := event.JSONBody(event.Bucket, event.Filename)
 	request, err := http.NewRequest(
 		http.MethodPut,
 		fmt.Sprintf("%s/api/v1/bucket", server),
@@ -82,6 +111,7 @@ func (event *FilledFileEvent) Store() {
 	requests <- request
 }
 
+// Delete : Deletes an item from the boltdb - triggered on file deleted
 func (event *FilledFileEvent) Delete() {
 	server := event.Config.AssembleServer()
 	request, err := http.NewRequest(
@@ -96,7 +126,8 @@ func (event *FilledFileEvent) Delete() {
 	requests <- request
 }
 
-func (event *FilledFileEvent) JsonBody(bucket string, key string) []byte {
+// JSONBody : Construct the JSON object to send as part of the request
+func (event *FilledFileEvent) JSONBody(bucket string, key string) []byte {
 	bucket = filepath.Base(bucket)
 	values := map[string]string{
 		"bucket": "files",
@@ -119,24 +150,28 @@ func (event *FilledFileEvent) JsonBody(bucket string, key string) []byte {
 	return jsonValue
 }
 
-/**
- * Path filler
- */
+// Filler : Struct for managing multiple event paths
 type Filler struct {
-	Paths  map[string]*FilledFileEvent
+
+	// A map of paths and events to watch
+	Paths map[string]*FilledFileEvent
+
+	// Configuration item for the fill command
 	Config *config.Config
 }
 
+// NewFiller : Create a new filler instance for adding/deleting from the database
 func NewFiller(config *config.Config) *Filler {
 	filler := Filler{}
 	filler.Config = config
 	filler.Paths = make(map[string]*FilledFileEvent)
-	for i := 1; i <= MAX_CLIENTS; i++ {
+	for i := 1; i <= MAXCLIENTS; i++ {
 		go filler.requestMaker()
 	}
 	return &filler
 }
 
+// Add : Add an event to the database
 func (filler *Filler) Add(bucket string, dirname string, filename string, notification notify.Event) {
 	var path string = filepath.Join(dirname, filename)
 	if dirname == bucket {
@@ -163,13 +198,19 @@ func (filler *Filler) Add(bucket string, dirname string, filename string, notifi
 	}
 }
 
-func (event *Filler) requestMaker() {
-	var client = &http.Client{}
+// Read requests off the channel and send them to the assemble server
+//
+// Starts MAX_CLIENTS http clients and tries to send each request up to 5 times
+// to ensure delivery of the payload.
+func (filler *Filler) requestMaker() {
+	var client = &http.Client{
+		Timeout: config.TIMEOUT,
+	}
 	var (
-		max_retries int = 5
-		retries     int = max_retries
-		err         error
-		response    *http.Response
+		maxRetries int = 5
+		retries    int = maxRetries
+		err        error
+		response   *http.Response
 	)
 	for {
 		select {
@@ -179,7 +220,7 @@ func (event *Filler) requestMaker() {
 				if err == nil {
 					break
 				}
-				retries -= 1
+				retries--
 			}
 			if response != nil {
 				if err := response.Body.Close(); err != nil {

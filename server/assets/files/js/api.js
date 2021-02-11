@@ -1,3 +1,10 @@
+/* Copyright 2021 The Tiyo authors
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 jQuery.each( [ "post", "put", "delete" ], function( i, method ) {
     jQuery[ method ] = function( url, data, callback, type ) {
         if ( jQuery.isFunction( data ) ) {
@@ -16,7 +23,7 @@ jQuery.each( [ "post", "put", "delete" ], function( i, method ) {
             contentType: contentType,
             dataType: type,
             data: data,
-            success: callback
+            success: callback,
         });
     };
 });
@@ -82,10 +89,8 @@ function createBucket(redirect=true)
         if (redirect) {
             window.location.assign('/scan');
         }
-    }).fail(function(e) {
-        $('#message').addClass('uk-alert-danger');
-        console.log(e);
-        $('#message').find('p').html('Failed to create bucket');
+    }).fail(function(error) {
+        handleError(error);
     });
 }
 
@@ -99,10 +104,8 @@ function createChild(parentBucket, childName, redirect=true)
         if (redirect) {
             window.location.assign('/scan');
         }
-    }).fail(function(e) {
-        $('#message').addClass('uk-alert-danger');
-        console.log(e);
-        $('#message').find('p').html('Failed to create bucket');
+    }).fail(function(error) {
+        handleError(error);
     });
 }
 
@@ -153,7 +156,10 @@ function put(b, c, k, v) {
         v = $('#value').val();
     }
 
-    $.put("/api/v1/bucket", JSON.stringify({ bucket: b, child: c, key: k, value: v }));
+    $.put(
+        "/api/v1/bucket",
+        JSON.stringify({ bucket: b, child: c, key: k, value: v })
+    );
 }
 
 function scan(v) {

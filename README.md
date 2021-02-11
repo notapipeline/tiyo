@@ -1,7 +1,8 @@
 # Tiyo
-![tiyo-interface](docs/images/jointjs.png)
+![tiyo-interface](docs/images/tiyo-pipeline.png)
 
-Tiyo is a pipeline application written in GO with a graphical drag-drop interface using JointJS, UIKit and JQuery.
+Tiyo is a pipeline and infrastructure application written in GO with a graphical drag-drop interface using JointJS,
+UIKit and JQuery.
 
 > ### Warning: Pre-alpha product.
 >
@@ -23,16 +24,16 @@ rewritten to provide API services for integration, originally only with a file e
 functionality based on [JointJS](https://www.jointjs.com/opensource).
 
 Out of the box, Tiyo is expected to support a number of different languages, each of which will run in a single docker
-container inside a Kubernetes stack. This is the equivelant of an AWS Lambda executor or "serverless" application.
+container inside a Kubernetes stack. This is the equivalent of an AWS Lambda executor or "serverless" application.
 
-![editor](docs/images/code-editor.png)
+![editor](docs/images/source-editor.png)
 
 To support this, Tiyo uses [ACE](https://ace.c9.io/) to provide an inline editor for your code. Alongside this. Tiyo
 supports a number of pre-built containers, which when running in Bio-informatics mode, come from
 [Biocontainers](https://biocontainers.pro/).
 
 ## Initial Support
-![initial\_offerings](docs/images/initial_offerings.png)
+![initial\_offerings](docs/images/initial-offerings.png)
 
 The principle languages integrated into Tiyo are:
 
@@ -56,9 +57,9 @@ Communication between the apps is via one of 4 methods:
 
 Right click on any element or link to set properties against it.
 
-Element                                 | TCP/UDP                             | File/Socket
-:--------------------------------------:|:-----------------------------------:|:------------------------------------:
-![](docs/images/element-properties.png) | ![](docs/images/tcp-properties.png) | ![](docs/images/file-properties.png)
+Application container properties            | Set properties                      | Source properties
+:------------------------------------------:|:-----------------------------------:|:------------------------------------:
+![](docs/images/application-properties.png) | ![](docs/images/tcp-properties.png) | ![](docs/images/source-properties.png)
 
 Any options not available on the given type will be greyed out/disabled, for example script on a pre-built container
 or `watch` events on a socket.
@@ -123,29 +124,4 @@ a HTTP DELETE request using the [API](docs/api.md).
 > If your container refuses to start with `binary not found`, either look for an alternate container, or compile with
 > this flag as appropriate.
 
-```
-go get
-go-bindata-assetfs -o server/assets.go -pkg server server/assets/...
-go build .
-mv tiyo ${GOPATH}/bin/
-```
-
-## Dependencies
-Tiyo relies on a number of dependencies for its build and execution. These are split into two categories:
-
-### Front End:
-- JointJS - [https://github.com/clientIO/joint](https://github.com/clientIO/joint)
-- JQuery - [https://github.com/jquery/jquery](https://github.com/jquery/jquery)
-- UIKit - [https://github.com/uikit/uikit](https://github.com/uikit/uikit)
-- Navigo - [https://github.com/krasimir/navigo](https://github.com/krasimir/navigo)
-- Handlebars - [https://github.com/handlebars-lang/handlebars.js](https://github.com/handlebars-lang/handlebars.js)
-- JSCookie - [https://github.com/js-cookie/js-cookie](https://github.com/js-cookie/js-cookie)
-- ACE - [https://github.com/ajaxorg/ace](https://github.com/ajaxorg/ace)
-
-### Backend
-- Gin - [https://github.com/gin-gonic/gin](https://github.com/gin-gonic/gin)
-- Assetfs - [https://github.com/elazarl/go-bindata-assetfs](https://github.com/elazarl/go-bindata-assetfs)
-- Notify - [https://github.com/rjeczalik/notify](https://github.com/rjeczalik/notify)
-- Client-go - [https://github.com/kubernetes/client-go](https://github.com/kubernetes/client-go)
-- Moby - [https://github.com/moby/moby](https://github.com/moby/moby)
 

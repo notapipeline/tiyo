@@ -1,3 +1,9 @@
+// Copyright 2021 The Tiyo authors
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 package flow
 
 import (
@@ -6,13 +12,12 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"regexp"
 	"strings"
 	"time"
 
-	"github.com/choclab-net/tiyo/config"
-	"github.com/choclab-net/tiyo/pipeline"
-	"github.com/choclab-net/tiyo/server"
+	"github.com/notapipeline/tiyo/config"
+	"github.com/notapipeline/tiyo/pipeline"
+	"github.com/notapipeline/tiyo/server"
 	log "github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -25,25 +30,46 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
+// ContainerStatus : A struct holding the status of a container
 type ContainerStatus struct {
-	Id     string `json:"id"`
-	State  string `json:"state"`
+
+	// The JointJS container ID
+	ID string `json:"id"`
+
+	// The current state of the container
+	State string `json:"state"`
+
+	// If the container has terminated, the reason is placed here
 	Reason string `json:"reason"`
 }
 
+// PodsStatus : A struct holding the status of a pod
 type PodsStatus struct {
-	State      string                     `json:"state"`
+
+	// The status of the pod
+	State string `json:"state"`
+
+	// A list of containers held by the pod
 	Containers map[string]ContainerStatus `json:"containers"`
 }
 
+// Kubernetes : Construction struct for Kubernetes
 type Kubernetes struct {
+
+	// The kubernetes configuration file for connecting to the cluster
 	KubeConfig *rest.Config
-	ClientSet  *kubernetes.Clientset
-	Config     *config.Config
-	Pipeline   *pipeline.Pipeline
-	NameExp    *regexp.Regexp
+
+	// Kubernetes clientset for connections
+	ClientSet *kubernetes.Clientset
+
+	// tiyo config file
+	Config *config.Config
+
+	// The pipeline for the current build
+	Pipeline *pipeline.Pipeline
 }
 
+// NewKubernetes : Create a new Kubernetes engine
 func NewKubernetes(config *config.Config, pipeline *pipeline.Pipeline) (*Kubernetes, error) {
 	log.Info("Initialising Kubernetes engine")
 	kube := Kubernetes{
@@ -52,7 +78,6 @@ func NewKubernetes(config *config.Config, pipeline *pipeline.Pipeline) (*Kuberne
 	}
 
 	var err error
-	kube.NameExp, _ = regexp.Compile("[^A-Za-z0-9]+")
 
 	log.Info("Loading config file from ", config.Kubernetes.ConfigFile)
 	kube.KubeConfig, err = clientcmd.BuildConfigFromFlags("", config.Kubernetes.ConfigFile)
@@ -68,6 +93,86 @@ func NewKubernetes(config *config.Config, pipeline *pipeline.Pipeline) (*Kuberne
 	return &kube, nil
 }
 
+// NodeMetrics : Information about nodes
+type NodeMetrics struct {
+
+	// the max cpu capacity of this node in millicpus
+	CPUCapacity int64 `json:"cpucapacity"`
+
+	// the number of requests on this node in millicpus
+	CPURequests int64 `json:"cpurequests"`
+
+	// the cpu limits on this node in millicpus
+	CPULimits int64 `json:"cpulimits"`
+
+	// the amount of memory available to this node in bytes
+	MemoryCapacity int64 `json:"memorycapacity"`
+
+	// the memory requests on this node in bytes
+	MemoryRequests int64 `json:"memoryrequests"`
+
+	// the memory limits on this node in bytes
+	MemoryLimits int64 `json:"memorylimits"`
+}
+
+// GetNodes : Get all nodes in the kubernetes cluster as a map[string]*NodeMetrics
+func (kube *Kubernetes) GetNodes() map[string]*NodeMetrics {
+	nodes := make(map[string]*NodeMetrics)
+	list, err := kube.ClientSet.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		log.Error("Cannot retrieve node list ", err)
+	}
+	for _, node := range list.Items {
+		nodes[node.Name] = kube.GetNodeResources(&node)
+	}
+
+	return nodes
+}
+
+// GetNodeResources : Get the resources available to a node
+func (kube *Kubernetes) GetNodeResources(node *corev1.Node) *NodeMetrics {
+	nodeMetrics := NodeMetrics{
+		CPUCapacity:    node.Status.Capacity.Cpu().MilliValue(),
+		CPURequests:    0,
+		CPULimits:      0,
+		MemoryCapacity: node.Status.Capacity.Memory().MilliValue(),
+		MemoryRequests: 0,
+		MemoryLimits:   0,
+	}
+
+	pods, err := kube.ClientSet.CoreV1().Pods("").List(context.TODO(), metav1.ListOptions{
+		FieldSelector: "spec.nodeName=" + node.Name,
+	})
+	if err != nil {
+		log.Error("Failed to retrieve pods for node " + node.Name)
+	}
+	for _, pod := range pods.Items {
+		for _, container := range pod.Spec.Containers {
+			requests := container.Resources.Requests
+			limits := container.Resources.Limits
+			for name, value := range requests {
+				switch name {
+				case corev1.ResourceCPU:
+					nodeMetrics.CPURequests += int64(value.MilliValue())
+				case corev1.ResourceMemory:
+					nodeMetrics.MemoryRequests += int64(value.MilliValue())
+				}
+			}
+			for name, value := range limits {
+				switch name {
+				case corev1.ResourceCPU:
+					nodeMetrics.CPURequests += int64(value.MilliValue())
+				case corev1.ResourceMemory:
+					nodeMetrics.MemoryRequests += int64(value.MilliValue())
+				}
+			}
+		}
+	}
+
+	return &nodeMetrics
+}
+
+// GetExternalNodeIPs : Get the list of external IPs available to the cluster
 func (kube *Kubernetes) GetExternalNodeIPs() []string {
 	// TODO: filter out master
 	list, err := kube.ClientSet.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
@@ -89,12 +194,14 @@ func (kube *Kubernetes) GetExternalNodeIPs() []string {
 	return addresses
 }
 
+// GetPod : Get a single pod by name
 func (kube *Kubernetes) GetPod(name string) *corev1.Pod {
 	pod, _ := kube.ClientSet.CoreV1().Pods(kube.Config.Kubernetes.Namespace).Get(
 		context.TODO(), name, metav1.GetOptions{})
 	return pod
 }
 
+// PodStatus : Get the status of a pod and its containers
 func (kube *Kubernetes) PodStatus(name string) (map[string]PodsStatus, error) {
 	pods, err := kube.ClientSet.CoreV1().Pods(kube.Config.Kubernetes.Namespace).List(
 		context.TODO(), metav1.ListOptions{
@@ -107,19 +214,18 @@ func (kube *Kubernetes) PodStatus(name string) (map[string]PodsStatus, error) {
 
 	statuses := make(map[string]PodsStatus)
 	for _, pod := range pods.Items {
-		podname := pod.Name
 		podStatus := PodsStatus{}
 		podStatus.State = string(pod.Status.Phase)
 
 		cstatus := make(map[string]ContainerStatus)
 		for _, container := range pod.Status.ContainerStatuses {
-			image := container.Image
+			image := container.Name
 			var (
 				state  string = "Waiting"
 				reason string = ""
 			)
 			if container.State.Running != nil {
-				state = kube.getStateFromDb(podname, image)
+				state = kube.getStateFromDb(pod.Name, image)
 				// if any container is busy, pod state is executing
 				if state == "Busy" {
 					podStatus.State = "Executing"
@@ -129,25 +235,25 @@ func (kube *Kubernetes) PodStatus(name string) (map[string]PodsStatus, error) {
 				reason = container.State.Terminated.Reason
 			}
 			if _, ok := cstatus[image]; !ok {
-				var c *pipeline.Command = kube.Pipeline.CommandFromImageName(image)
+				var c *pipeline.Command = kube.Pipeline.CommandFromContainerName(name, image)
 				var id string = ""
 				if c != nil {
-					id = c.Id
+					id = c.ID
 				}
 				cstatus[image] = ContainerStatus{
-					Id:     id,
+					ID:     id,
 					State:  state,
 					Reason: reason,
 				}
 			}
 		}
 		podStatus.Containers = cstatus
-		statuses[podname] = podStatus
+		statuses[pod.Name] = podStatus
 	}
 	return statuses, nil
 }
 
-// Gets any additional reported state from the database
+// getStateFromDb : Gets any additional reported state from the database
 //
 // On any error, this will return "running" as this is the default
 // state the pod is in.
@@ -170,7 +276,9 @@ func (kube *Kubernetes) getStateFromDb(podname string, image string) string {
 	request.Header.Set("Accept", "application/json")
 	request.Header.Set("Connection", "close")
 	request.Close = true
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: config.TIMEOUT,
+	}
 	response, err := client.Do(request)
 	if err != nil {
 		log.Error(err)
@@ -195,6 +303,7 @@ func (kube *Kubernetes) getStateFromDb(podname string, image string) string {
 	return state
 }
 
+// PodExists : Check that a pod exists
 func (kube *Kubernetes) PodExists(name string) bool {
 	list, err := kube.ClientSet.CoreV1().Pods(kube.Config.Kubernetes.Namespace).List(
 		context.TODO(), metav1.ListOptions{})
@@ -212,12 +321,14 @@ func (kube *Kubernetes) PodExists(name string) bool {
 
 // STATEFUL SET METHODS
 
+// GetStatefulSet : Retrieves a statefulset configuration from the cluster
 func (kube *Kubernetes) GetStatefulSet(name string) *appsv1.StatefulSet {
 	statefulset, _ := kube.ClientSet.AppsV1().StatefulSets(kube.Config.Kubernetes.Namespace).Get(
 		context.TODO(), name, metav1.GetOptions{})
 	return statefulset
 }
 
+// StatefulSetExists : Check that a statefulset of a given name exists
 func (kube *Kubernetes) StatefulSetExists(name string) bool {
 	list, err := kube.ClientSet.AppsV1().StatefulSets(kube.Config.Kubernetes.Namespace).List(
 		context.TODO(), metav1.ListOptions{})
@@ -233,6 +344,7 @@ func (kube *Kubernetes) StatefulSetExists(name string) bool {
 	return false
 }
 
+// GetStatefulSetContainers : Get all containers under a statefulset
 func (kube *Kubernetes) GetStatefulSetContainers(instances []*pipeline.Command) []corev1.Container {
 	containers := make([]corev1.Container, 0)
 	for _, instance := range instances {
@@ -245,7 +357,7 @@ func (kube *Kubernetes) GetStatefulSetContainers(instances []*pipeline.Command) 
 			Resources: corev1.ResourceRequirements{
 				Requests: corev1.ResourceList{
 					// hard coded for the moment but should come from form
-					"cpu":    resource.MustParse(instance.Cpu),
+					"cpu":    resource.MustParse(instance.CPU),
 					"memory": resource.MustParse(instance.Memory),
 				},
 			},
@@ -255,6 +367,7 @@ func (kube *Kubernetes) GetStatefulSetContainers(instances []*pipeline.Command) 
 	return containers
 }
 
+// DestroyStatefulSet : Destroys a given statefulset and all resources under it
 func (kube *Kubernetes) DestroyStatefulSet(pipeline string, container *pipeline.Container) {
 	var name string = pipeline + "-" + container.Name
 	log.Info("Deleting stateful set ", name)
@@ -271,7 +384,7 @@ func (kube *Kubernetes) DestroyStatefulSet(pipeline string, container *pipeline.
 			break
 		}
 		container.State = "Terminating"
-		log.Info("Still deleting statefulset", name)
+		log.Info("Still deleting statefulset ", name)
 		time.Sleep(1 * time.Second)
 	}
 
@@ -280,10 +393,17 @@ func (kube *Kubernetes) DestroyStatefulSet(pipeline string, container *pipeline.
 	}
 }
 
+// CreateStatefulSet : Create a new statefulset
 func (kube *Kubernetes) CreateStatefulSet(pipeline string, container *pipeline.Container) {
 	var name string = pipeline + "-" + container.Name
 	client := kube.ClientSet.AppsV1().StatefulSets(kube.Config.Kubernetes.Namespace)
 	instances := container.GetChildren()
+
+	// If the stateful set exists, delete it so it can be re-created.
+	if kube.StatefulSetExists(name) {
+		container.State = "Terminating"
+		kube.DestroyStatefulSet(pipeline, container)
+	}
 
 	log.Info("Creating stateful set ", name)
 	statefulset := &appsv1.StatefulSet{
@@ -323,12 +443,6 @@ func (kube *Kubernetes) CreateStatefulSet(pipeline string, container *pipeline.C
 				},
 			},
 		},
-	}
-
-	// If the stateful set exists, delete and recreate it.
-	if kube.StatefulSetExists(name) {
-		container.State = "Terminating"
-		kube.DestroyStatefulSet(pipeline, container)
 	}
 
 	// otherwise create
@@ -391,6 +505,12 @@ func (kube *Kubernetes) CreateDaemonSet(pipeline string, container *pipeline.Con
 	var name string = pipeline + "-" + container.Name
 	client := kube.ClientSet.AppsV1().DaemonSets(kube.Config.Kubernetes.Namespace)
 
+	// If the daemonset exists, delete and recreate it.
+	if kube.DaemonSetExists(name) {
+		container.State = "Terminating"
+		kube.DestroyDaemonSet(pipeline, container)
+	}
+
 	daemonset := &appsv1.DaemonSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -426,12 +546,6 @@ func (kube *Kubernetes) CreateDaemonSet(pipeline string, container *pipeline.Con
 				},
 			},
 		},
-	}
-
-	// If the daemonset exists, delete and recreate it.
-	if kube.DaemonSetExists(name) {
-		container.State = "Terminating"
-		kube.DestroyDaemonSet(pipeline, container)
 	}
 
 	result, err := client.Create(context.TODO(), daemonset, metav1.CreateOptions{})
@@ -507,6 +621,12 @@ func (kube *Kubernetes) CreateDeployment(pipeline string, container *pipeline.Co
 	var name string = pipeline + "-" + container.Name
 	instances := container.GetChildren()
 
+	// If the deployment exists delete and recreate it.
+	if kube.DeploymentExists(name) {
+		container.State = "Terminating"
+		kube.DestroyDeployment(pipeline, container)
+	}
+
 	client := kube.ClientSet.AppsV1().Deployments(kube.Config.Kubernetes.Namespace)
 
 	deployment := &appsv1.Deployment{
@@ -535,12 +655,6 @@ func (kube *Kubernetes) CreateDeployment(pipeline string, container *pipeline.Co
 				},
 			},
 		},
-	}
-
-	// If the deployment exists delete and recreate it.
-	if kube.DeploymentExists(name) {
-		container.State = "Terminating"
-		kube.DestroyDeployment(pipeline, container)
 	}
 
 	result, err := client.Create(context.TODO(), deployment, metav1.CreateOptions{})
@@ -598,7 +712,7 @@ func (kube *Kubernetes) GetServicePorts(instances []*pipeline.Command) []corev1.
 			port.TargetPort = intstr.FromInt(instance.ExposePort)
 			log.Debug("Found target port ", port.TargetPort)
 			port.Protocol = corev1.ProtocolTCP
-			if instance.IsUdp {
+			if instance.IsUDP {
 				port.Protocol = corev1.ProtocolUDP
 			}
 			ports = append(ports, port)
@@ -701,9 +815,14 @@ func (kube *Kubernetes) ServiceExists(name string) bool {
 	return false
 }
 
+// ServicePort : Address and port information for sending into NGINX
 type ServicePort struct {
+
+	// The node IP address
 	Address string
-	Port    int32
+
+	// The service node port
+	Port int32
 }
 
 func (kube *Kubernetes) ServiceNodePorts(name string) *[]ServicePort {
@@ -818,7 +937,10 @@ func (kube *Kubernetes) IngressRules(serviceName string, instances []*pipeline.C
 	if kube.Config.ExternalNginx {
 		servicePorts := kube.ServiceNodePorts(serviceName)
 		log.Debug("Firing Create nginx config with ", rules, servicePorts)
-		CreateNginxConfig(kube.Config, serviceName, rules, servicePorts)
+		container := kube.Pipeline.ContainerFromServiceName(serviceName)
+		if container != nil {
+			CreateNginxConfig(kube.Config, container.Name, rules, servicePorts)
+		}
 	}
 
 	return rules

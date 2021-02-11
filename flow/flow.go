@@ -1,3 +1,19 @@
+// Copyright 2021 The Tiyo authors
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+// Package flow : This is the main executor for the pipeline sub-system
+// Flow takes the pipeline object, iterates over it and builds the
+// elements contained within it. It also contains handlers for
+// handing status information back to assemble front end, and for
+// delivering commands into the syphon executors via API calls.
+//
+// Flow can be triggered in single pipeline mode by specifying the pipeline
+// as a command line parameter (-p), and/or in update mode which will cause
+// any containers in the pipeline to be rebuilt - useful for updating Tiyo
+// inside any containers active in the pipeline.
 package flow
 
 import (
@@ -17,54 +33,75 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"github.com/choclab-net/tiyo/config"
-	"github.com/choclab-net/tiyo/pipeline"
+	"github.com/notapipeline/tiyo/config"
+	"github.com/notapipeline/tiyo/pipeline"
 )
 
+// Flow : Main structure of the Flow subsystem
 type Flow struct {
-	Name        string
-	Update      bool
-	Config      *config.Config
-	Pipeline    *pipeline.Pipeline
-	Docker      *Docker
-	Kubernetes  *Kubernetes
-	Flags       *flag.FlagSet
-	Queue       *Queue
+
+	// The real name (non-formatted) of the pipeline used by Flow
+	Name string
+
+	// The config system used by flow
+	Config *config.Config
+
+	// The pipeline executed by this instance of flow
+	Pipeline *pipeline.Pipeline
+
+	// The docker engine
+	Docker *Docker
+
+	// Kubernetes engine
+	Kubernetes *Kubernetes
+
+	// Flags expected for execution of Flow
+	Flags *flag.FlagSet
+
+	// The queue system for managing event handoff from assemble to syphon
+	Queue *Queue
+
+	// Is the pipeline being executed
 	IsExecuting bool
-	Api         *FlowApi
+
+	// The API subsystem
+	API *API
+
+	// Is this flow being executed in update mode (will rebuild all containers)
+	update bool
 }
 
+// NewFlow : Construct a new Flow object
 func NewFlow() *Flow {
 	flow := Flow{}
-	flow.Api = NewFlowApi()
+	flow.API = NewAPI()
 	flow.IsExecuting = false
 	return &flow
 }
 
+// Init : Parse the command line and any environment variables for configuring Flow
 func (flow *Flow) Init() {
 	log.Info("Initialising flow")
 	flow.Name = os.Getenv("TIYO_PIPELINE")
 	description := "The name of the pipeline to use"
 	flow.Flags = flag.NewFlagSet("flow", flag.ExitOnError)
 	flow.Flags.StringVar(&flow.Name, "p", flow.Name, description)
-	flow.Flags.BoolVar(&flow.Update, "u", false, "Update any containers")
+	flow.Flags.BoolVar(&flow.update, "u", false, "Update any containers")
 	flow.Flags.Parse(os.Args[2:])
 	log.Debug("Flow initialised", flow)
 }
 
-/**
- * Creates an instance of the command environment if one does not already exist
- */
+// Create : Creates a new docker container image if one is not already found in the library
 func (flow *Flow) Create(instance *pipeline.Command) error {
-	log.Info("flow - Creating new container instance for ", instance.Name, " ", instance.Id)
+	log.Info("flow - Creating new container instance for ", instance.Name, " ", instance.ID)
 	var err error
-	var containerExists bool = false
+	var containerExists bool
 	containerExists, err = flow.Docker.ContainerExists(instance.Tag)
 	if err != nil {
 		return err
 	}
 
-	if containerExists && !flow.Update {
+	if containerExists && !flow.update {
 		log.Info("Not building image for ", instance.Image, " Image exists")
 		return nil
 	}
@@ -96,6 +133,7 @@ func (flow *Flow) Create(instance *pipeline.Command) error {
 	return nil
 }
 
+// Cleanup : Delete any redundant files left over from building the container
 func (flow *Flow) Cleanup(path string, owd string, err error) error {
 	os.Chdir(owd)
 	if e := os.RemoveAll(path); e != nil {
@@ -104,6 +142,7 @@ func (flow *Flow) Cleanup(path string, owd string, err error) error {
 	return err
 }
 
+// WriteDockerfile ; Writes the template dockerfile ready for building the container
 func (flow *Flow) WriteDockerfile(instance *pipeline.Command) error {
 	log.Info("Creating Dockerfile ", instance.Image)
 	var name string = "Dockerfile"
@@ -132,6 +171,7 @@ func (flow *Flow) WriteDockerfile(instance *pipeline.Command) error {
 	return nil
 }
 
+// CopyTiyoBinary : Tiyo embeds itself into the containers it build to run in Syphon mode.
 func (flow *Flow) CopyTiyoBinary() error {
 	log.Debug("Copying tiyo binary")
 
@@ -166,6 +206,7 @@ func (flow *Flow) CopyTiyoBinary() error {
 	return nil
 }
 
+// WriteConfig : Create a basic config for Syphon to communicate with the current flow
 func (flow *Flow) WriteConfig() error {
 	log.Debug("Creating stub config for container wrap")
 	path, _ := os.Getwd()
@@ -190,17 +231,14 @@ func (flow *Flow) WriteConfig() error {
 	return nil
 }
 
+// Setup : Sets up the flow ready for execution
 func (flow *Flow) Setup(pipelineName string) bool {
 	flow.Name = pipelineName
 	var err error
 
-	// Load the pipeline
-	flow.Pipeline, err = pipeline.GetPipeline(flow.Config, flow.Name)
-	if err != nil {
-		log.Error("issue loading pipeline ", flow.Name, " - ", err)
+	if !flow.LoadPipeline(pipelineName) {
 		return false
 	}
-
 	// Create the queue
 	flow.Queue = NewQueue(flow.Config, flow.Pipeline, flow.Pipeline.BucketName)
 
@@ -220,8 +258,21 @@ func (flow *Flow) Setup(pipelineName string) bool {
 	return true
 }
 
+// LoadPipeline : Loads a pipeline from a given name returning false if the pipeline fails to load
+func (flow *Flow) LoadPipeline(pipelineName string) bool {
+	// Load the pipeline
+	var err error
+	flow.Pipeline, err = pipeline.GetPipeline(flow.Config, flow.Name)
+	if err != nil {
+		log.Error("issue loading pipeline ", flow.Name, " - ", err)
+		return false
+	}
+	return true
+}
+
+// Execute : Triggers the current flow building all components
 func (flow *Flow) Execute() {
-	flow.IsExecuting = true
+	flow.Start()
 	// create all missing containers
 	for _, command := range flow.Pipeline.Commands {
 		log.Debug("Pipeline start item", command)
@@ -237,16 +288,17 @@ func (flow *Flow) Execute() {
 	for _, item := range flow.Pipeline.Containers {
 		switch item.SetType {
 		case "statefulset":
-			go flow.Kubernetes.CreateStatefulSet(flow.Pipeline.DnsName, item)
+			go flow.Kubernetes.CreateStatefulSet(flow.Pipeline.DNSName, item)
 		case "deployment":
-			go flow.Kubernetes.CreateDeployment(flow.Pipeline.DnsName, item)
+			go flow.Kubernetes.CreateDeployment(flow.Pipeline.DNSName, item)
 		case "daemonset":
-			go flow.Kubernetes.CreateDaemonSet(flow.Pipeline.DnsName, item)
+			go flow.Kubernetes.CreateDaemonSet(flow.Pipeline.DNSName, item)
 		}
 	}
 	flow.triggerServices()
 }
 
+// Find : Find a pipeline by name and return a new Flow object with the pipeline embedded
 func (flow *Flow) Find(name string, config *config.Config) *Flow {
 	log.Debug("Searching for pipeline matching ", name)
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{
@@ -261,7 +313,9 @@ func (flow *Flow) Find(name string, config *config.Config) *Flow {
 		return nil
 	}
 
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: config.TIMEOUT,
+	}
 	response, err := client.Do(request)
 	if err != nil {
 		log.Error(err)
@@ -300,30 +354,35 @@ func (flow *Flow) Find(name string, config *config.Config) *Flow {
 	return nil
 }
 
+// Stop : Stop the flow queue from executing - does not stop the build
 func (flow *Flow) Stop() {
 	flow.IsExecuting = false
 	flow.Queue.Stop()
 }
 
+// Start : Starts the flow queue
 func (flow *Flow) Start() {
 	flow.IsExecuting = true
 	flow.Queue.Start()
 }
 
+// Destroy : Destroys any infrastructure relating to this flow
 func (flow *Flow) Destroy() {
 	flow.Stop()
+	log.Warn("Destroying flow for ", flow.Pipeline.Name)
 	for _, item := range flow.Pipeline.Containers {
 		switch item.SetType {
 		case "statefulset":
-			go flow.Kubernetes.DestroyStatefulSet(flow.Pipeline.DnsName, item)
+			go flow.Kubernetes.DestroyStatefulSet(flow.Pipeline.DNSName, item)
 		case "deployment":
-			go flow.Kubernetes.DestroyDeployment(flow.Pipeline.DnsName, item)
+			go flow.Kubernetes.DestroyDeployment(flow.Pipeline.DNSName, item)
 		case "daemonset":
-			go flow.Kubernetes.DestroyDaemonSet(flow.Pipeline.DnsName, item)
+			go flow.Kubernetes.DestroyDaemonSet(flow.Pipeline.DNSName, item)
 		}
 	}
 }
 
+// Run : Run Flow
 func (flow *Flow) Run() int {
 	var (
 		err error
@@ -350,7 +409,7 @@ func (flow *Flow) Run() int {
 	log.Info("Setting working directory to ", flow.Config.DbDir)
 	os.Chdir(flow.Config.DbDir)
 	// Start server in background
-	go flow.Api.Serve(flow.Config)
+	go flow.API.Serve(flow.Config)
 	if flow.Name != "" {
 		flow.Setup(flow.Name)
 		flow.Execute()
@@ -360,23 +419,41 @@ func (flow *Flow) Run() int {
 	return 0
 }
 
+// triggerServices : If any containers in the pipeline have been defined as auto-start or
+// they directly expose ports, these commands should be automatically executed and not wait
+// for events to stream in from outside.
+//
+// This is achieved by adding an iniial command to the queue destined for those services.
+//
+// TODO: Needs scale factor adding - should be one instance of command per pod.
 func (flow *Flow) triggerServices() {
 	for _, container := range flow.Pipeline.Containers {
 		for _, instance := range container.GetChildren() {
-			if instance.ExposePort < 1 || !instance.Autostart {
+			var execute bool = instance.AutoStart
+			if instance.ExposePort > 0 {
+				execute = true
+			}
+
+			if !execute {
 				continue
 			}
 
+			log.Info("Triggering service command for ", instance.Name)
 			// example:
-			// rna-star-tiyo:2.7.7a:sorting:root:GL53_003_Plate3_c1_Gfi1_HE_S3 - command.Id
-			var commandKey string = instance.Name + "-tiyo:" + instance.Version + ":" + container.Name
-			var contents map[string]string = make(map[string]string)
-			contents[commandKey] = instance.Id
+			// rna-star-tiyo:2.7.7a:sorting:root:GL53_003_Plate3_c1_Gfi1_HE_S3 - command.ID
+			var commandKey string = instance.GetContainer(true) + ":" + container.Name
+			var contents map[string]string = map[string]string{
+				"bucket": "queue",
+				"child":  flow.Pipeline.BucketName,
+				"key":    commandKey,
+				"value":  instance.ID,
+			}
 			data, _ := json.Marshal(contents)
 
+			var address string = flow.Config.AssembleServer() + "/api/v1/bucket"
 			request, err := http.NewRequest(
 				http.MethodPut,
-				flow.Config.AssembleServer()+"/api/v1/queue/"+flow.Pipeline.BucketName,
+				address,
 				bytes.NewBuffer(data))
 
 			if err != nil {
@@ -386,10 +463,16 @@ func (flow *Flow) triggerServices() {
 			request.Header.Set("Connection", "close")
 			request.Close = true
 
+			client := &http.Client{
+				Timeout: config.TIMEOUT,
+			}
 			response, err := client.Do(request)
 			if err != nil {
 				log.Error(err)
+			} else if response.StatusCode > 204 {
+				log.Error("Received unknown response code ", response.StatusCode, " for address ", address)
 			}
+			log.Info("Queued command ", commandKey)
 		}
 	}
 }

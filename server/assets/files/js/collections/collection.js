@@ -1,10 +1,18 @@
+/* Copyright 2021 The Tiyo authors
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
+
 /**
  * Represents a collection of items for assignment to the graph
  */
 class Collection {
     // Timeout duration for waiting for objects to load
     TIMEOUT = 250;
-    
+
     promisedKey = null;
     promisedValue = null;
 
@@ -21,36 +29,44 @@ class Collection {
         if (typeof(joint.shapes.container[this.objectType] === 'undefined')) {
             $.getScript(
                 '/static/js/collections/' + this.collectionType + '.js',
-                function() {
+                () => {
                     this.object = (Function('return new ' + this.objectType))();
                     this.object.setupEvents();
                     this.getElements();
-                }.bind(this)
+                },
+                (error) => {
+                    handleError(error)
+                }
             );
         }
     }
-    
+
     isGroupType() {
         return this.object.groupType;
     }
-    
+
     getElements() {
         var elements = [];
         if (this.collectionType == 'link') {
             this.elements = this.object.getElements();
             return;
         }
-        $.get('/api/v1/collections/' + this.collectionType, function (data) {
-            elements = data.message;
-            elements.sort(function (a, b) {
-                return a.toLowerCase().localeCompare(b.toLowerCase());
-            });
-            for (var i = 0; i < elements.length; i++) {
-                var element = elements[i].split('.')[0];
-                this.elements[element] = null;
+        $.get(
+            '/api/v1/collections/' + this.collectionType,
+            (data) => {
+                elements = data.message;
+                elements.sort(function (a, b) {
+                    return a.toLowerCase().localeCompare(b.toLowerCase());
+                });
+                for (var i = 0; i < elements.length; i++) {
+                    var element = elements[i].split('.')[0];
+                    this.elements[element] = null;
+                }
+                this.waitFor(this.callback.bind(this));
             }
-            this.waitFor(this.callback.bind(this));
-        }.bind(this));
+        ).fail((error) => {
+            handleError();
+        });
     }
 
     clone(what) {
@@ -66,7 +82,6 @@ class Collection {
     }
 
     promisedGet() {
-        console.log("Sending back " + this.promisedKey);
         return this.get(this.promisedKey);
     }
 
@@ -81,7 +96,7 @@ class Collection {
     close() {
         return this.object.close();
     }
-    
+
     attributes(view, event, x, y) {
         return this.object.attributes(view, event, x, y);
     }
@@ -99,20 +114,24 @@ class Collection {
 
     // Load the assigned element type
     graphElement() {
-        Object.keys(this.elements).forEach(function (element) {
-            $.get('/static/img/' + this.collectionType + '/' + element + '.svg', function(data) {
-                var attrs = this.defaultAttrs;
-                attrs['element'] = element;
-                attrs['attrs'] = {
-                    '.body': {
-                        'xlink:href': 'data:image/svg+xml;utf8,' + encodeURIComponent(new XMLSerializer().serializeToString(data.documentElement))
-                    },
+        Object.keys(this.elements).forEach((element) => {
+            $.get('/static/img/' + this.collectionType + '/' + element + '.svg',
+                (data) => {
+                    var attrs = this.defaultAttrs;
+                    attrs['element'] = element;
+                    attrs['attrs'] = {
+                        '.body': {
+                            'xlink:href': 'data:image/svg+xml;utf8,' + encodeURIComponent(new XMLSerializer().serializeToString(data.documentElement))
+                        },
+                    }
+                    this.elements[element] = new joint.shapes.container[this.objectType](attrs);
                 }
-                this.elements[element] = new joint.shapes.container[this.objectType](attrs);
-            }.bind(this));
-        }.bind(this));
+            ).fail((error) => {
+                handleError(error);
+            });
+        });
     }
-    
+
     // Sets up the graph element and templates the list onto the page
     callback() {
         this.graphElement();

@@ -1,3 +1,18 @@
+// Copyright 2021 The Tiyo authors
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+// Package fill acts as a sub-command, reading inotify events and
+// forwarding them to the boldb backing the assemble server.
+//
+// By default, the fill command is designed to listen for only
+// open, close and delete events tying it to the Linux subsystem.
+//
+// Whilst Windows/Mac can generate similar events, these are not
+// handled by the `tiyo fill` application and as a result, this
+// section of the application is not designed for those platforms.
 package fill
 
 import (
@@ -7,28 +22,39 @@ import (
 	"path/filepath"
 	"regexp"
 
-	"github.com/choclab-net/tiyo/config"
-	"github.com/choclab-net/tiyo/pipeline"
+	"github.com/notapipeline/tiyo/config"
+	"github.com/notapipeline/tiyo/pipeline"
 	"github.com/rjeczalik/notify"
 	log "github.com/sirupsen/logrus"
 )
 
+// Fill : Primary structure of the fill command
 type Fill struct {
-	Filler         *Filler
-	Config         *config.Config
-	Pipeline       *pipeline.Pipeline
-	Name           string
-	Flags          *flag.FlagSet
-	PipelineBucket string
+
+	// The filler object managed by this instance of the fill command
+	Filler *Filler
+
+	// Configuration of the fill command
+	Config *config.Config
+
+	// The pipeline being handled by this command
+	Pipeline *pipeline.Pipeline
+
+	// The name of the pipeline to load
+	Name string
+
+	// Command flags
+	Flags *flag.FlagSet
 }
 
+// NewFill Create a new fill command
 func NewFill() *Fill {
 	log.Info("Starting new fill executor")
-	filler := Fill{}
-	return &filler
+	fill := Fill{}
+	return &fill
 }
 
-// pipeline must previously exist
+// Init the command according to the flags and environment variables provided
 func (fill *Fill) Init() {
 	fill.Name = os.Getenv("TIYO_PIPELINE")
 	description := "The name of the pipeline to use"
@@ -41,6 +67,7 @@ func (fill *Fill) Init() {
 	}
 }
 
+// Listen for file events on all watch paths defined in the pipeline
 func (fill *Fill) fill() {
 	var matchers []pipeline.Matcher = fill.Pipeline.WatchItems()
 	channels := make([]chan notify.EventInfo, len(matchers))
@@ -54,6 +81,7 @@ func (fill *Fill) fill() {
 		log.Info("Creating channel for ", path)
 		os.MkdirAll(path, os.ModePerm)
 
+		// each event stream is executed in its own goroutine to isolate from other watchers
 		go func(directory string, match *regexp.Regexp, channel chan notify.EventInfo) {
 			log.Info("Start listening for ", directory, " with match ", match)
 			if err := notify.Watch(directory, channel, notify.InOpen, notify.InCloseWrite, notify.Remove); err != nil {
@@ -90,6 +118,7 @@ func (fill *Fill) fill() {
 
 }
 
+// Run the fill application to listen for monitored file events
 func (fill *Fill) Run() int {
 	sigc := make(chan os.Signal, 1)
 	done := make(chan bool)

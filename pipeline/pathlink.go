@@ -1,26 +1,48 @@
+// Copyright 2021 The Tiyo authors
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 package pipeline
 
-// Socket / Path connections
+// A PathLink specifies how to connect files, directories and sockets between
+// components in the pipeline.
+
+// PathLink : Socket / Path connections
 type PathLink struct {
+
+	// Common Link details
 	Link
-	Path    string
+
+	// The path this link will listen against
+	// If link type is Path, this is mutually exclusive with Pattern
+	Path string
+
+	// Regex pattern to match when reading paths
+	// ignored if link type is socket
 	Pattern string
-	Watch   bool
+
+	// If link type is path sets up inotify watchers for the path
+	Watch bool
 }
 
+// GetType : Get the type of link
 func (path *PathLink) GetType() string {
 	return path.Link.Type
 }
 
+// GetLink : Get common link details
 func (path *PathLink) GetLink() Link {
 	return path.Link
 }
 
+// NewPathLink : Convert a map[string]interface into a PathLink type
 func NewPathLink(cell map[string]interface{}) *PathLink {
 	link := GetLink(cell)
 	path := PathLink{
 		Link{
-			Id:     link.Id,
+			ID:     link.ID,
 			Type:   link.Type,
 			Source: link.Source,
 			Target: link.Target,

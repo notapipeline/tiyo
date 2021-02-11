@@ -1,3 +1,9 @@
+// Copyright 2021 The Tiyo authors
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 package pipeline
 
 import (
@@ -16,40 +22,97 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const DEFAULT_TIMEOUT = 15
+// TIMEOUT : The maximum number of minutes a command can execute for if not forever
+const TIMEOUT = 15
 
+// Command : Define the structure of a command taken from JointJS and executed by Syphon
 type Command struct {
-	Id            string `json:"id"`
-	Parent        string `json:"parent"`
-	Name          string `json:"name"`
-	Command       string `json:"command"`
-	AutoStart     bool   `json:"autostart"`
-	Args          string `json:"args"`
-	Version       string `json:"version"`
-	Language      string `json:"element"`
-	Script        bool   `json:"script"`
-	ScriptContent string `json:"scriptcontent"`
-	Custom        bool   `json:"custom"`
-	Timeout       int    `json:"timeout"`
-	UseExisting   bool   `json:"existing"`
-	ExposePort    int    `json:"exposeport"`
-	IsUdp         bool   `json:"isudp"`
-	Cpu           string `json:"cpu"`
-	Memory        string `json:"memory"`
-	StartTime     int64  `json:""`
-	EndTime       int64  `json:""`
 
-	Image         string
-	Tag           string
-	Stdout        bytes.Buffer
-	Stderr        bytes.Buffer
-	ProcessId     int
-	ProcessArgs   []string
+	// ID is the jointJS element ID
+	ID string `json:"id"`
+
+	// Parent is the jointJS ID of a parent container
+	Parent string `json:"parent"`
+
+	// The command container name
+	Name string `json:"name"`
+
+	// The executable binary name to trigger when events are recieved
+	Command string `json:"command"`
+
+	// Should the command automatically be started
+	AutoStart bool `json:"autostart"`
+
+	// Arguments to give to the command
+	Args string `json:"args"`
+
+	// The version of the container
+	Version string `json:"version"`
+
+	// The programming language the container is executing
+	Language string `json:"element"`
+
+	// Does this container have a script to execute
+	Script bool `json:"script"`
+
+	// The content of the script - will be base64 encoded for transmission safety
+	ScriptContent string `json:"scriptcontent"`
+
+	// Is this a custom container or is it a pre-fabricated container from an upstream source
+	Custom bool `json:"custom"`
+
+	// The user defined timeout in minutes - if >15 will be rounded down to 15
+	Timeout int `json:"timeout"`
+
+	// (Re)Use an existing container
+	UseExisting bool `json:"existing"`
+
+	// Expose this port as a service port
+	ExposePort int `json:"exposeport"`
+
+	// Is the service port a UDP port
+	IsUDP bool `json:"isudp"`
+
+	// The required CPU of the container (default 500m cpu)
+	CPU string `json:"cpu"`
+
+	// The required memory of the container (default 256Mi)
+	Memory string `json:"memory"`
+
+	// The time this command was started in unix nano
+	StartTime int64 `json:"starttime"`
+
+	// The time this command ended in unix nano
+	EndTime int64 `json:"endtime"`
+
+	// Environment variables to set directly on the command
+	Environment []string `json:"environment"`
+
+	// The image string to build the docker container from and load into kubernetes
+	Image string
+
+	// The computed tag to upload the container docker image as
+	Tag string
+
+	// Standard output buffer
+	Stdout bytes.Buffer
+
+	// Standard error buffer
+	Stderr bytes.Buffer
+
+	// The commands process ID whilst executing
+	ProcessID int
+
+	// A computed set of process arguments including any files
+	ProcessArgs []string
+
+	// A computed file separator
 	FileSeperator string
 }
 
 var regex *regexp.Regexp
 
+// Sanitize a given string, removing any non-alphanumeric characters and replacing them with sep.
 func Sanitize(str string, sep string) string {
 	regex, err := regexp.Compile("[^a-zA-Z0-9]+")
 	if err != nil {
@@ -58,9 +121,10 @@ func Sanitize(str string, sep string) string {
 	return strings.Trim(strings.ToLower(regex.ReplaceAllString(str, sep)), sep)
 }
 
+// NewCommand : Create a new command instance
 func NewCommand(cell map[string]interface{}) *Command {
 	command := Command{
-		Id:            "",
+		ID:            "",
 		Name:          "",
 		Command:       "",
 		AutoStart:     false,
@@ -70,18 +134,19 @@ func NewCommand(cell map[string]interface{}) *Command {
 		Script:        false,
 		ScriptContent: "",
 		Custom:        false,
-		Timeout:       DEFAULT_TIMEOUT,
+		Timeout:       TIMEOUT,
 		UseExisting:   false,
 		ExposePort:    -1,
-		IsUdp:         false,
+		IsUDP:         false,
 		StartTime:     0,
 		EndTime:       0,
-		Cpu:           "500m",
+		CPU:           "500m",
 		Memory:        "256Mi",
 	}
+	command.Environment = make([]string, 0)
 
 	if cell["id"] != nil {
-		command.Id = cell["id"].(string)
+		command.ID = cell["id"].(string)
 	}
 
 	if cell["parent"] != nil {
@@ -127,13 +192,13 @@ func NewCommand(cell map[string]interface{}) *Command {
 	if cell["timeout"] != nil {
 		command.Timeout = int(cell["timeout"].(float64))
 		if command.Timeout == 0 {
-			command.Timeout = DEFAULT_TIMEOUT
+			command.Timeout = TIMEOUT
 		}
 		if command.Timeout != -1 {
 			command.Timeout = command.Timeout * 60
 		}
 	} else {
-		command.Timeout = DEFAULT_TIMEOUT * 60
+		command.Timeout = TIMEOUT * 60
 	}
 
 	if cell["existing"] != nil {
@@ -145,20 +210,37 @@ func NewCommand(cell map[string]interface{}) *Command {
 	}
 
 	if cell["isudp"] != nil {
-		command.IsUdp = cell["isudp"].(bool)
+		command.IsUDP = cell["isudp"].(bool)
 	}
 
 	if cell["cpu"] != nil {
-		command.Cpu = cell["cpu"].(string)
+		command.CPU = cell["cpu"].(string)
 	}
 
 	if cell["memory"] != nil {
 		command.Memory = cell["memory"].(string)
 	}
 
+	if cell["environment"] != nil {
+		envvars := cell["environment"].([]interface{})
+		for _, value := range envvars {
+			command.Environment = append(command.Environment, value.(string))
+		}
+	}
+
 	return &command
 }
 
+// AddEnvVar : Add a value to the environment variables
+// key, value will be converted to KEY=value
+func (command *Command) AddEnvVar(key, value string) {
+	command.Environment = append(command.Environment, strings.ToUpper(key)+"='"+value+"'")
+}
+
+// GetContainer : Gets a container build string.
+//
+// if asTag is True, returns a modified form of the container string
+// for uploading to the primary source
 func (command *Command) GetContainer(asTag bool) string {
 	container := command.Language
 	switch command.Language {
@@ -189,6 +271,7 @@ func (command *Command) GetContainer(asTag bool) string {
 	return name
 }
 
+// GenerateRandomString : Generates a random string of 12 characters for use in temporary filenames
 func (command *Command) GenerateRandomString() string {
 	const charset = "abcdefghijklmnopqrstuvwxyz" +
 		"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
@@ -201,6 +284,7 @@ func (command *Command) GenerateRandomString() string {
 	return string(b)
 }
 
+// WriteScript : Convert script content provided in the JointJS element to file on disk for processing
 func (command *Command) writeScript() (string, error) {
 	if command.Language == "dockerfile" {
 		return "", nil
@@ -229,9 +313,18 @@ func (command *Command) writeScript() (string, error) {
 	return name, nil
 }
 
+// Execute : Execute the current command inside the container
+//
+// This is the main workhorse function for the application, taking all
+// User configured and temporary variables, mapping them into the environment
+// and process arguments then executing the command, terminating as necesssary
+// after the configured timeout, and capturing the output for later storage and
+// retrieval
 func (command *Command) Execute(directory string, subdir string, filename string, event string) int {
 	log.Info("Using environment:")
-	for _, value := range os.Environ() {
+	var environment []string = append(os.Environ(), command.Environment...)
+
+	for _, value := range environment {
 		log.Info("    - ", value)
 	}
 
@@ -287,12 +380,15 @@ func (command *Command) Execute(directory string, subdir string, filename string
 
 	log.Info("Triggering command ", command.Command, " ", command.ProcessArgs)
 	cmd := exec.Command(command.Command, command.ProcessArgs...)
-	cmd.Env = os.Environ()
+	cmd.Env = environment
 
 	// dont collect logs on forever run
 	if command.Timeout != -1 {
 		cmd.Stdout = io.MultiWriter(os.Stdout, &command.Stdout)
 		cmd.Stderr = io.MultiWriter(os.Stderr, &command.Stderr)
+	} else {
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
 	}
 	command.StartTime = time.Now().UnixNano()
 
@@ -359,7 +455,7 @@ func (command *Command) collectFiles(directory string, filename string) string {
 	return dirReturn
 }
 
-// Executes the given command in a "forever" loop
+// ExecuteForever : Executes the given command in a "forever" loop
 //
 // Note:
 // This command does not copy any logs - presuming they will grow exponentially
@@ -379,7 +475,7 @@ func (command *Command) ExecuteForever(cmd *exec.Cmd, done chan error) int {
 	return 0
 }
 
-// Runs the given command with a timeout
+// ExecuteWithTimeout : Runs the given command with a timeout
 //
 // By default, this timeout is set to 15 minutes and this value is used if 0 is provided.
 // Longer timeouts can be set or set to -1 to run forever.
@@ -404,6 +500,7 @@ func (command *Command) ExecuteWithTimeout(cmd *exec.Cmd, done chan error) int {
 	return exitCode
 }
 
+// recreateTmp : Deletes and recreates the temporary directory inside the container
 func (command *Command) recreateTmp() {
 	err := os.RemoveAll("/tmp")
 	if err == nil {

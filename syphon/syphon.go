@@ -1,3 +1,22 @@
+// Copyright 2021 The Tiyo authors
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+// Package syphon : Cluster command execution
+//
+// The syphon sub-system runs inside each container, generally as PID 1
+// and its purpose is to wait for events to be assigned to it off the
+// Queue.
+//
+// It does this by periodically polling the flow server it knows about
+// and being assigned a command as part of that polling process.
+//
+// Once assigned, a command may either run forever, or run up until
+// MAXTIMEOUT has been reached, usually 15 minutes after the command first
+// began executing, after which the command will terminate and the
+// container will begin polling again for the next command.
 package syphon
 
 import (
@@ -12,9 +31,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choclab-net/tiyo/config"
-	"github.com/choclab-net/tiyo/pipeline"
-	"github.com/choclab-net/tiyo/server"
+	"github.com/notapipeline/tiyo/config"
+	"github.com/notapipeline/tiyo/pipeline"
+	"github.com/notapipeline/tiyo/server"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -27,7 +46,7 @@ type Syphon struct {
 	self     string
 }
 
-// Create a new syphon executor
+// NewSyphon : Create a new syphon executor
 func NewSyphon() *Syphon {
 	syphon := Syphon{}
 	var err error
@@ -35,7 +54,9 @@ func NewSyphon() *Syphon {
 	if err != nil {
 		log.Panic(err)
 	}
-	syphon.client = &http.Client{}
+	syphon.client = &http.Client{
+		Timeout: config.TIMEOUT,
+	}
 	syphon.server = syphon.config.FlowServer()
 	hostname, err := os.Hostname()
 	if err != nil {
@@ -82,7 +103,7 @@ func (syphon *Syphon) register(status string) *server.QueueItem {
 		return nil
 	}
 
-	log.Info("Recieved response with status code ", response.StatusCode, " for status ", status)
+	log.Info("Received response with status code ", response.StatusCode, " for status ", status)
 	var message string = ""
 	if response.StatusCode == http.StatusAccepted || response.StatusCode == http.StatusNoContent {
 		// Flow has accepted our update but has no command to return
@@ -124,14 +145,20 @@ func (syphon *Syphon) register(status string) *server.QueueItem {
 	return &command
 }
 
+// requeue : push a failed task back to the queue
 func (syphon *Syphon) requeue(queueItem *server.QueueItem) {}
 
+// log : push logs back to the flow server
 func (syphon *Syphon) log(code int, command *pipeline.Command) {}
 
+// execute : trigger the queued command
 func (syphon *Syphon) execute(queueItem *server.QueueItem) {
 	command := &queueItem.Command
+	command.AddEnvVar("BASE_DIR", syphon.config.SequenceBaseDir)
+	command.AddEnvVar("PIPELINE_DIR", queueItem.PipelineFolder)
+
 	var baseDir string = filepath.Join(syphon.config.SequenceBaseDir, queueItem.PipelineFolder, queueItem.SubFolder)
-	log.Info("Recieved filename ", filepath.Join(baseDir, queueItem.Filename), " with command ", command)
+	log.Info("Received filename ", filepath.Join(baseDir, queueItem.Filename), " with command ", command)
 
 	var exitCode int
 	if exitCode = command.Execute(baseDir, syphon.self, queueItem.Filename, queueItem.Event); exitCode != 0 {
@@ -150,10 +177,10 @@ func (syphon *Syphon) execute(queueItem *server.QueueItem) {
 	}
 }
 
-// Syphon will not have an initialiser.
+// Init : Syphon will not have an initialiser as it contains no flags to parse
 func (syphon *Syphon) Init() {}
 
-// Run the syphon command executor
+// Run : Runs the syphon command executor
 //
 // This is the main entry point for the syphon command and is executed
 // from command.Command package.
@@ -181,10 +208,11 @@ func (syphon *Syphon) Run() int {
 				log.Info("Registering busy and executing command")
 				syphon.register("Busy")
 				syphon.execute(command)
+			} else {
+				// if we have not received a command to execute
+				// sleep the loop for 10 seconds and try again
+				time.Sleep(10 * time.Second)
 			}
-
-			// Check for a new command every 10 seconds
-			time.Sleep(10 * time.Second)
 		}
 	}()
 	<-done

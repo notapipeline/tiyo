@@ -17,6 +17,9 @@
         <script src="https://cdn.jsdelivr.net/npm/backbone@1.4.0/backbone.min.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/jointjs@3.2.0/dist/joint.min.js"></script>
 
+        <!-- Gauge chart -->
+        <script src="https://unpkg.com/gauge-chart@latest/dist/bundle.js"></script>
+
         <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/handlebars@4.7.6/dist/handlebars.js"></script>
         <script type="text/javascript" src="/static/js/lib/jquery.editable.min.js"></script>
     </head>
@@ -38,6 +41,16 @@
                                     </ul>
                                 </div>
                             </li>
+                            <li>
+                                <a href="#">Edit<span data-uk-icon="icon: triangle-down"></span></a>
+                                <div class="uk-navbar-dropdown">
+                                    <ul class="uk-nav uk-navbar-dropdown-nav edit">
+                                        <li><a><span data-uk-icon="icon: file"></span> Environment</a></li>
+                                        <li><a><span data-uk-icon="icon: file-edit"></span> Credentials</a></li>
+                                    </ul>
+                                </div>
+                            </li>
+
                         </ul>
                     </div>
                     <div class="uk-navbar-right">
@@ -123,11 +136,27 @@
         </section>
 
         <!-- Pipeline -->
-        <section class="uk-position-medium uk-position-top-left" id="pipeline">
-            <h3 class="editable pagetitle pipelinetitle">Untitled</h3>
+        <section class="uk-position-medium uk-position-top-left uk-width-1-1" id="pipeline">
             <div id="paper-pipeline-holder" class="uk-grid uk-grid-medium uk-sortable" uk-grid>
-                <div id="paper-pipeline" class="uk-height-1-1 uk-width-medium-1-3"></div>
-                <aside class="uk-height-1-1">
+                <div class="uk-width-3-4 uk-first-column uk-grid-margin uk-height-1-1 casing">
+                    <header>
+                        <h3 class="editable pagetitle pipelinetitle">Untitled</h3>
+                    </header>
+                    <div class="gauges">
+                        <fieldset>
+                            <legend>Available</legend>
+                            <div id="availableCpu"></div>
+                            <div id="availableMemory"></div>
+                        </fieldset>
+                        <fieldset>
+                            <legend>Requested</legend>
+                            <div id="pipelineCpu"></div>
+                            <div id="pipelineMemory"></div>
+                        </fieldset>
+                    </div>
+                    <div id="paper-pipeline"></div>
+                </div>
+                <aside class="uk-height-1-1 uk-width-1-4">
                     <div class="uk-panel uk-panel-box" data-uk-sticky="{top:35}">
                         <h4 class="uk-nav-header">Applications</h4>
                         <div class="uk-margin">
@@ -214,14 +243,55 @@
             </div>
         </div>
 
+        <div id="environment" class="uk-flex-top" href="#modal-center" uk-modal>
+            <div class="uk-modal-dialog uk-modal-body uk-margin-auto-vertical">
+                <h3>Environment</h3>
+                <div id="environment-content"></div>
+                <div id="scriptentrybuttons" style="float: right; margin-top: 10px;">
+                    <button class="uk-button uk-button-small uk-modal-close" onclick="pipeline.cancelEnvironment()">Cancel </button>
+                    <button class="uk-button uk-button-primary uk-button-small" onclick="pipeline.saveEnvironment()">Save</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="credentials"></div>
         <div id="scriptentry" class="uk-flex-top" href="#modal-center" uk-modal>
             <div class="uk-modal-dialog uk-modal-body uk-margin-auto-vertical">
                 <ul uk-tab id="codesource" data-uk-tab="{connect:'#scriptsource'}">
                     <li id="codesource1" class="uk-active"><a href="#">Inline</a></li>
-                    <li id="codesource2"><a href="#">Upload</a></li>
+                    <li id="codesource2"><a href="#">Git Repository</a></li>
+                    <li id="codesource3"><a href="#">Upload</a></li>
                 </ul>
                 <ul id="scriptsource" class="uk-switcher uk-margin">
                     <li id="editor" class="uk-active"></li>
+                    <li id="gitrepo">
+                        <form>
+                            <table>
+                                <tbody>
+                                    <tr>
+                                        <td>Repository address</td>
+                                        <td><input id="gitrepo" value="" /></td>
+                                    </tr>
+                                    <tr>
+                                        <td>Branch</td>
+                                        <td><input id="gitbranch" value="" /></td>
+                                    </tr>
+                                    <tr>
+                                        <td>Username</td>
+                                        <td><input id="gituser" value="" /></td>
+                                    </tr>
+                                    <tr>
+                                        <td>Password</td>
+                                        <td><input id="gitpass" value="" type="password" /></td>
+                                    </tr>
+                                    <tr>
+                                        <td>Entry-point</td>
+                                        <td><input id="gitentry" value="" /></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </form>
+                    </li>
                     <li><div id="upload">Not implemented</div></li>
                 </ul>
                 <div id="scriptentrybuttons" style="float: right; margin-top: 10px;">
@@ -230,6 +300,7 @@
                 </div>
             </div>
         </div>
+        <div id="message"><p></p></div>
     </body>
 
 

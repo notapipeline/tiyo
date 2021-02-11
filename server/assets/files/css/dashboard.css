@@ -1,3 +1,10 @@
+/* Copyright 2021 The Tiyo authors
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 /* -- Top navigation -- */
 #top-head {
 	z-index: 9;
@@ -203,10 +210,6 @@
 	margin: 0 auto;
 }
 
-#paper-pipeline svg {
-    height: 100%;
-}
-
 .uk-panel-box {
     width: 250px;
     padding: 15px;
@@ -273,6 +276,10 @@ form.uk-panel-box {
     border-radius: 10px;
     display: none;
     z-index: 1000;
+}
+
+.properties h4 {
+    color: #666;
 }
 
 .properties label {
@@ -355,13 +362,51 @@ section#pipeline > div.uk-grid {
     cursor: move;
 }
 
-div#scriptentry {
+.properties label {
+    max-width: 150px;
+}
+
+.properties input {
+    appearance: none;
+    height: 23px;
+    line-height: 23px;
+    border-radius: 3px;
+    border: 0px;
+    padding: 0 10px;
+    margin: 0;
+}
+.properties input[type=button] {
+    background: white;
+}
+
+.properties td > span {
+    display: block;
+    text-indent: 5px;
+    height: 23px;
+    float: right;
+}
+
+.properties td > span > label {
+    display: inline-block;
+    width: 44px;
+}
+
+.properties input[type=checkbox] {
+    appearance: checkbox;
+    vertical-align: middle;
+}
+
+div#scriptentry,
+div#environment
+{
     top: 20%;
     left: 20%;
     width: 55%;
 }
 
-div#scriptentry > div.uk-modal-dialog {
+div#scriptentry > div.uk-modal-dialog,
+div#environment > div.uk-modal-dialog
+{
     width: 100%;
     height: 400px;
 }
@@ -382,6 +427,92 @@ ul#scriptsource li {
     height: 100%;
 }
 
+#environment-content {
+    position: relative;
+    height: 70%;
+    border-bottom: 1px solid #222A30;
+}
+
+#paper-pipeline-holder {
+    margin-top: -80px;
+}
+
+#paper-pipeline-holder > div.casing {
+    margin: 0;
+    margin-top: -30px;
+    padding: 0;
+    overflow: hidden;
+}
+
+#paper-pipeline {
+    overflow: hidden;
+}
+
+#paper-pipeline svg {
+    height: 100%;
+}
+
+.casing header {
+    float: left;
+    top: 30px;
+    position: relative;
+}
+
+div.gauges {
+    float: right;
+    width: 100%;
+    max-width: 520px;
+}
+
+div.gauges fieldset {
+    float: right;
+    padding: 0;
+    margin: 0;
+    border: 0;
+}
+div.gauges legend {
+    text-align: center;
+    height: 5px;
+    margin-left: 10px;
+    width: 100%;
+}
+
+div.gauges +fieldset {
+    margin: 0;
+}
+
+div.gauges fieldset > div {
+    width: 130px;
+    float: left;
+}
+
+div#message {
+    display: none;
+    width: fit-content;
+    height: 15px;
+    border-radius: 3px;
+    position: absolute;
+    top: 5px;
+    padding: 10px;
+    z-index: 1000;
+    font-family: monospace;
+    font-size: 10pt;
+}
+
+div.error {
+    background-color: #C74553;
+    color: white;
+}
+
+div.warning {
+    background-color: #83cc72;
+    color: black;
+}
+
+div.success {
+    background-color: #578a4b;
+    color: white;
+}
 
 .uk-accordion-title {
     color: rgba(255,255,255,.5) !important;

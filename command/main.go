@@ -1,3 +1,11 @@
+// Copyright 2021 The Tiyo authors
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+// Package command serves as the main entry point to the tiyo application
+// and its relevant primary sub-commands `assemble`, `flow`, `fill` and `syphon`
 package command
 
 import (
@@ -5,20 +13,26 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/choclab-net/tiyo/fill"
-	"github.com/choclab-net/tiyo/flow"
-	"github.com/choclab-net/tiyo/server"
-	"github.com/choclab-net/tiyo/syphon"
+	"github.com/notapipeline/tiyo/fill"
+	"github.com/notapipeline/tiyo/flow"
+	"github.com/notapipeline/tiyo/server"
+	"github.com/notapipeline/tiyo/syphon"
 	log "github.com/sirupsen/logrus"
 )
 
+// VERSION : The applications current version number
 const VERSION string = "v0.0.1a"
 
+// Command : define the main interface for sub-commands
+//
+// Any primary subcommand executable by this wrapper
+// needs to implement this interface.
 type Command interface {
 	Init()
 	Run() int
 }
 
+// static list of subcommands accepted by tiyo
 var acceptedCommands = []string{
 	"assemble",
 	"fill",
@@ -28,6 +42,11 @@ var acceptedCommands = []string{
 	"version",
 }
 
+// SetupLog : configure the primary application logging system
+//
+// By default, the logging level is info but this can
+// be controlled by the environment variable TIYO_LOG
+// if a finer level of control is required.
 func SetupLog() {
 	var level string = os.Getenv("TIYO_LOG")
 	if level == "" {
@@ -41,9 +60,14 @@ func SetupLog() {
 		log.SetLevel(log.DebugLevel)
 	case "info":
 		log.SetLevel(log.InfoLevel)
+	case "warn":
+		log.SetLevel(log.WarnLevel)
+	case "error":
+		log.SetLevel(log.ErrorLevel)
 	}
 }
 
+// Usage : print usage information about the main application
 func Usage() {
 	fmt.Printf("USAGE: %s [COMMAND] [FLAGS]:\n", filepath.Base(os.Args[0]))
 	for _, command := range acceptedCommands {
@@ -53,6 +77,7 @@ func Usage() {
 
 }
 
+// Run : Main entry for the primary wrapper
 func Run(args []string) int {
 	SetupLog()
 	var command string = "help"

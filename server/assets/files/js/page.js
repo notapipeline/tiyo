@@ -1,3 +1,9 @@
+/* Copyright 2021 The Tiyo authors
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
 
 // JointJS elements
 var graph = null;
@@ -21,7 +27,6 @@ var collections = {
 }
 
 for (var collection in collections) {
-    console.log("Loading collection " + collection);
     collections[collection] = new Collection(collection, defaultAttrs[collection]);
     collections[collection].load();
 }
@@ -179,7 +184,6 @@ function onDragging(e) {
 function loadMenu() {
     $('.file').find('li > a').bind("click", function() {
         var text = $(this).text().toLowerCase().trim();
-        console.log(router.lastResolved()[0].url, text)
         switch (router.lastResolved()[0].url) {
             case "pipeline":
                 switch (text) {
@@ -213,6 +217,26 @@ function loadMenu() {
                 break;
         }
     });
+    $('.edit').find('li > a').bind("click", function() {
+        var text = $(this).text().toLowerCase().trim();
+        switch (router.lastResolved()[0].url) {
+            case "pipeline":
+                switch (text) {
+                    case "environment":
+                        openEnvironmentPopup(pipeline.graph);
+                        break;
+                    case "credentials":
+                        openCredentialsPopup();
+                        break;
+                }
+                break;
+        }
+    });
+}
+
+function openEnvironmentPopup(whatfor) {
+    pipeline.appelement = whatfor;
+    pipeline.showEnvironment();
 }
 
 /**
@@ -245,6 +269,52 @@ function pipelineExecuting() {
         return;
     }
     var pipeline = Cookies.get('pipeline');
+}
+
+function handleError(err) {
+    error(err.responseJSON.message);
+}
+
+function displayMessage(element) {
+    width = $(window).width();
+    containerWidth = element.width();
+    leftMargin = (width-containerWidth)/2;
+    element.css({
+        display: 'block',
+        opacity: '100%',
+        'margin-left': leftMargin,
+    });
+    element.fadeOut(5000, () => {
+        element.find('p').html("");
+        element.css({
+            display: 'none',
+        });
+        element.removeClass('error')
+    });
+}
+
+function success(message) {
+    var element = $('#message');
+    element.removeClass();
+    element.addClass('success');
+    element.find('p').html(message);
+    displayMessage(element);
+}
+
+function warning(message) {
+    var element = $('#message');
+    element.removeClass();
+    element.addClass('warning');
+    element.find('p').html(message);
+    displayMessage(element);
+}
+
+function error(message) {
+    var element = $('#message');
+    element.removeClass();
+    element.addClass('error');
+    element.find('p').html(message);
+    displayMessage(element);
 }
 
 /**

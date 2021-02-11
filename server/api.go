@@ -1,4 +1,12 @@
+// Copyright 2021 The Tiyo authors
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 package server
+
+// Primary API service for Assemble server
 
 import (
 	"bytes"
@@ -12,59 +20,102 @@ import (
 	"time"
 
 	"github.com/boltdb/bolt"
-	"github.com/choclab-net/tiyo/config"
-	"github.com/choclab-net/tiyo/pipeline"
+	"github.com/notapipeline/tiyo/config"
+	"github.com/notapipeline/tiyo/pipeline"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 )
 
+// Store the list of containers globally to prevent it
+// being re-downloaded each time the list is requested
 var containers []string
 
+// GithubResponse : Expected information from the Github request
 type GithubResponse struct {
 	Name string `json:"name"`
 	Type string `json:"type"`
 }
 
+// QueueItem : Type information about an item on the queue
 type QueueItem struct {
-	PipelineFolder string           `json:"pipelineFolder"`
-	SubFolder      string           `json:"subFolder"`
-	Filename       string           `json:"filename"`
-	Event          string           `json:"event"`
-	Command        pipeline.Command `json:"command"`
+
+	// The pipeline folder this queue is destined for
+	PipelineFolder string `json:"pipelineFolder"`
+
+	// Subfolder is a child of pipeline folder and usually
+	// representative of the upstream command being actioned
+	SubFolder string `json:"subFolder"`
+
+	// The filename of the queue element
+	Filename string `json:"filename"`
+
+	// Event data represented in string format
+	Event string `json:"event"`
+
+	// The command to execute
+	Command pipeline.Command `json:"command"`
 }
 
+// Result : A server result defines the body wrapper sent back to the client
 type Result struct {
-	Code    int         `json:"code"`
-	Result  string      `json:"result"`
+
+	// HTTP response code
+	Code int `json:"code"`
+
+	// HTTP Result string - normally one of OK | Error
+	Result string `json:"result"`
+
+	// The request message being returned
 	Message interface{} `json:"message"`
 }
 
+// ScanResult : Return values stored in a bucket
 type ScanResult struct {
-	Buckets       []string          `json:"buckets"`
-	BucketsLength int               `json:"bucketlen"`
-	Keys          map[string]string `json:"keys"`
-	KeyLen        int               `json:"keylen"`
+
+	// Buckets is a list of child buckets the scanned bucket might contain
+	Buckets []string `json:"buckets"`
+
+	// For simplicity on the caller side, send the number of child buckets found
+	BucketsLength int `json:"bucketlen"`
+
+	// A map of key:value pairs containing bucket data
+	Keys map[string]string `json:"keys"`
+
+	// For simplicity, the number of keys in the bucket
+	KeyLen int `json:"keylen"`
 }
 
+// Lock : Allow for locking individual queues whilst manipulating them
 type Lock struct {
 	sync.Mutex
 	locks []string
 }
 
+// NewResult : Create a new result item
 func NewResult() *Result {
 	result := Result{}
 	return &result
 }
 
-type Api struct {
-	Db        *bolt.DB
-	Config    *config.Config
+// API : Assemble server api object
+type API struct {
+
+	// The bolt database held by this installation
+	Db *bolt.DB
+
+	// Server Configuration
+	Config *config.Config
+
+	// A map of queue sizes
 	QueueSize map[string]int
+
+	// The lock table for the queues
 	queueLock *Lock
 }
 
-func NewApi(dbName string, config *config.Config) (*Api, error) {
-	api := Api{}
+// NewAPI : Create a new API instance
+func NewAPI(dbName string, config *config.Config) (*API, error) {
+	api := API{}
 	api.Config = config
 	var err error
 	api.Db, err = bolt.Open(dbName, 0600, &bolt.Options{Timeout: 2 * time.Second})
@@ -79,13 +130,18 @@ func NewApi(dbName string, config *config.Config) (*Api, error) {
 	return &api, nil
 }
 
-func (api *Api) Index(c *gin.Context) {
+// Index : Render the index page back on the GIN context
+//
+// TODO : Make this a little more versatile and use SSR to render
+//        more of the page than relying on JS and a one page website
+func (api *API) Index(c *gin.Context) {
 	c.HTML(200, "index", gin.H{
-		"Title": "BoltDB Web Interface",
+		"Title": "TIYO ASSEMBLE - Kubernetes cluster designer",
 	})
 }
 
-func (api *Api) GetContainers() []string {
+// GetContainers : Get the list of containers for the sidebar on the pipeline page
+func (api *API) GetContainers() []string {
 	if containers != nil {
 		return containers
 	}
@@ -94,16 +150,18 @@ func (api *Api) GetContainers() []string {
 		panic(err)
 	}
 	request.Header.Set("Accept", "application/vnd.github.v3+json")
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: config.TIMEOUT,
+	}
 	response, err := client.Do(request)
 	if err != nil {
 		panic(err)
 	}
 	defer response.Body.Close()
-	body, err := ioutil.ReadAll(response.Body)
+	body, _ := ioutil.ReadAll(response.Body)
 
 	message := make([]GithubResponse, 0)
-	err = json.Unmarshal(body, &message)
+	json.Unmarshal(body, &message)
 	for index := range message {
 		if message[index].Type == "dir" {
 			containers = append(containers, message[index].Name)
@@ -112,7 +170,11 @@ func (api *Api) GetContainers() []string {
 	return containers
 }
 
-func (api *Api) Containers(c *gin.Context) {
+// Containers : The API endpoint method for retrieving the sidebar container set
+//
+// Returned responses will be one of:
+// - 200 OK    : Message will be a list of strings
+func (api *API) Containers(c *gin.Context) {
 	result := NewResult()
 	result.Code = 200
 	result.Result = "OK"
@@ -120,7 +182,12 @@ func (api *Api) Containers(c *gin.Context) {
 	c.JSON(result.Code, result)
 }
 
-func (api *Api) Buckets(c *gin.Context) {
+// Buckets : List all available top level buckets
+//
+// Returned responses will be one of:
+// - 200 OK    : Message will be a list of bucket names
+// - 500 Error : Message will be the error message
+func (api *API) Buckets(c *gin.Context) {
 	result := NewResult()
 	result.Code = 200
 	result.Result = "OK"
@@ -141,7 +208,19 @@ func (api *Api) Buckets(c *gin.Context) {
 	c.JSON(result.Code, result)
 }
 
-func (api *Api) CreateBucket(c *gin.Context) {
+// CreateBucket : Create a new bucket
+//
+// POST /bucket
+//
+// The create request must contain:
+// - bucket - the name of the bucket to create or parent bucket name when creating a child
+// - child  - [optional] the name of the child bucket to create
+//
+// Responses are:
+// - 201 Created
+// - 400 Bad request sent when bucket name is empty
+// - 500 Internal server error
+func (api *API) CreateBucket(c *gin.Context) {
 	result := NewResult()
 	result.Code = 201
 	result.Result = "OK"
@@ -182,7 +261,19 @@ func (api *Api) CreateBucket(c *gin.Context) {
 	c.JSON(result.Code, result)
 }
 
-func (api *Api) DeleteBucket(c *gin.Context) {
+// DeleteBucket : Deletes a given bucket
+//
+// DELETE /bucket/:bucket[/:child]
+//
+// The url parameters must contain:
+// - bucket - the name of the bucket to delete or parent bucket name when deleting a child
+// - child  - [optional] the name of the child bucket to create
+//
+// Responses are:
+// - 202 Accepted
+// - 400 Bad request sent when bucket name is empty
+// - 500 Internal server error
+func (api *API) DeleteBucket(c *gin.Context) {
 	result := NewResult()
 	result.Code = 202
 	result.Result = "OK"
@@ -212,7 +303,20 @@ func (api *Api) DeleteBucket(c *gin.Context) {
 
 }
 
-func (api *Api) DeleteKey(c *gin.Context) {
+// DeleteKey : Delete a key value pair from a bucket
+//
+// DELETE /bucket/:bucket[/:child]/:key
+//
+// URL parameters are:
+// - bucket : The name of the bucket containing the key
+// - child  : [optional] The name of a child bucket to manage
+// - key    : The key to delete
+//
+// Returned responses are:
+// - 202 Accepted
+// - 400 Bad Request when bucket or key are empty
+// - 500 Internal server error on failure to delete
+func (api *API) DeleteKey(c *gin.Context) {
 	result := NewResult()
 	result.Code = 202
 	result.Result = "OK"
@@ -228,7 +332,7 @@ func (api *Api) DeleteKey(c *gin.Context) {
 	}
 	request["key"] = strings.Trim(request["key"], "/")
 
-	if request["bucket"] == "" {
+	if request["bucket"] == "" || request["key"] == "" {
 		result.Code = 400
 		result.Result = "Error"
 		result.Message = "Missing bucket name or key"
@@ -257,7 +361,7 @@ func (api *Api) DeleteKey(c *gin.Context) {
 		return nil
 	}); err != nil {
 		fmt.Println(err)
-		result.Code = 400
+		result.Code = 500
 		result.Result = "Error"
 		result.Message = err
 	}
@@ -269,7 +373,21 @@ func (api *Api) DeleteKey(c *gin.Context) {
 
 }
 
-func (api *Api) Put(c *gin.Context) {
+// Put : create a key/value pair in the boltdb
+//
+// PUT /bucket
+//
+// Request parameters:
+// - bucket The bucket to write into
+// - child  [optional] the child bucket to write into
+// - key    The key to add
+// - value  The value to save against the key
+//
+// Response codes
+// - 204 No content if key successfully stored
+// - 400 Bad request if bucket or key is missing
+// - 500 Internal server error if value cannot be stored
+func (api *API) Put(c *gin.Context) {
 	result := NewResult()
 	result.Code = 204
 	result.Result = "OK"
@@ -316,7 +434,7 @@ func (api *Api) Put(c *gin.Context) {
 
 		return nil
 	}); err != nil {
-		result.Code = 400
+		result.Code = 500
 		result.Result = "Error"
 		result.Message = err
 	}
@@ -328,7 +446,15 @@ func (api *Api) Put(c *gin.Context) {
 
 }
 
-func (api *Api) Get(c *gin.Context) {
+// Get : Get the value for a given key
+//
+// GET /bucket/:bucket[/:child]/:key
+//
+// Response codes
+// - 200 OK - Message will be the value
+// - 400 Bad Request if bucket or key is empty
+// - 500 Internal server error if value cannot be retrieved
+func (api *API) Get(c *gin.Context) {
 	result := NewResult()
 	result.Code = 200
 	result.Result = "OK"
@@ -368,7 +494,7 @@ func (api *Api) Get(c *gin.Context) {
 		result.Message = string(value)
 		return nil
 	}); err != nil {
-		result.Code = 400
+		result.Code = 500
 		result.Result = "Error"
 		result.Message = err
 	}
@@ -376,7 +502,20 @@ func (api *Api) Get(c *gin.Context) {
 
 }
 
-func (api *Api) PrefixScan(c *gin.Context) {
+// PrefixScan : Scan a bucket and retrieve all contents with keys matching prefix
+//
+// GET /scan/:bucket[/:child][/:key]
+//
+// Request parameters
+// - bucket [required] The bucket name to scan
+// - child  [optional] The child bucket to scan instead
+// - key    [optional] If key is not specified, all contents will be returned
+//
+// Response codes
+// - 200 OK Messsage will be a map of matching key/value pairs
+// - 400 Bad Request if bucket name is empty
+// - 500 Internal server error if the request fails for any reason
+func (api *API) PrefixScan(c *gin.Context) {
 	result := Result{Result: "error"}
 	result.Code = 200
 	result.Result = "OK"
@@ -446,7 +585,7 @@ func (api *Api) PrefixScan(c *gin.Context) {
 		return nil
 	}); err != nil {
 		log.Error(err)
-		result.Code = 400
+		result.Code = 500
 		result.Result = "Error"
 		result.Message = err.Error()
 	}
@@ -455,7 +594,16 @@ func (api *Api) PrefixScan(c *gin.Context) {
 
 }
 
-func (api *Api) KeyCount(c *gin.Context) {
+// KeyCount : Count keys in a bucket
+//
+// GET /count/:bucket[/:child]
+//
+// Response codes:
+// - 200 OK - Message will be the number of keys in the bucket
+// - 400 Bad Request - Bucket name is missing
+// - 404 Page not found - Bucket name is invalid
+// - 500 Internal server error on all other errors
+func (api *API) KeyCount(c *gin.Context) {
 	result := Result{Result: "error"}
 	result.Code = 200
 	result.Result = "OK"
@@ -493,14 +641,22 @@ func (api *Api) KeyCount(c *gin.Context) {
 		}
 		return nil
 	}); err != nil {
-		result.Code = 400
+		result.Code = 500
 		result.Result = "Error"
 		result.Message = err
 	}
 	c.JSON(result.Code, result)
 }
 
-// Execute the current pipeline
+// ExecuteFlow : Executes the current pipeline
+//
+// POST /execute
+//
+// Request parameters:
+// - pipeline - The name of the pipeline to trigger
+//
+// Response codes:
+// - See forwardPost method below
 //
 // Flow execution is handed off to the flow api to build the infrastructure
 // and begin executing the queue.
@@ -508,23 +664,56 @@ func (api *Api) KeyCount(c *gin.Context) {
 // This should be a straight pass-through and flow should be responsible for
 // verifying if infrastructure has/has not already been built or the pipeline
 // is already in the process of being executed.
-func (api *Api) ExecuteFlow(c *gin.Context) {
+func (api *API) ExecuteFlow(c *gin.Context) {
 	api.forwardPost(c, "execute")
 }
 
-func (api *Api) StopFlow(c *gin.Context) {
+// StopFlow : Stops the queue to prevent flow of information
+//
+// POST /stopflow
+//
+// Request parameters:
+// - pipeline - The name of the pipeline to trigger
+//
+// Response codes:
+// - See forwardPost method below
+func (api *API) StopFlow(c *gin.Context) {
 	api.forwardPost(c, "stop")
 }
 
-func (api *Api) StartFlow(c *gin.Context) {
+// StartFlow : Starts the queue to flow information out into the pods
+//
+// POST /startflow
+//
+// Request parameters:
+// - pipeline - The name of the pipeline to trigger
+//
+// Response codes:
+// - See forwardPost method below
+func (api *API) StartFlow(c *gin.Context) {
 	api.forwardPost(c, "start")
 }
 
-func (api *Api) DestroyFlow(c *gin.Context) {
+// DestroyFlow : Destroys all infrastructure for a given flow
+//
+// POST /destroyflow
+//
+// Request parameters:
+// - pipeline - The name of the pipeline to trigger
+//
+// Response codes:
+// - See forwardPost method below
+func (api *API) DestroyFlow(c *gin.Context) {
 	api.forwardPost(c, "destroy")
 }
 
-func (api *Api) forwardPost(c *gin.Context, endpoint string) {
+// forwardPost : Manages forwarding requests from the client through to Flow
+//
+// Response codes:
+// - 400 Bad request if request cannot bind to map[string]string
+// - 500 Internal server error if request or response are invalid
+// - All others are reponse codes from the related endpoints in flow
+func (api *API) forwardPost(c *gin.Context, endpoint string) {
 	content := make(map[string]string)
 	if err := c.ShouldBind(&content); err != nil {
 		log.Error(err)
@@ -557,7 +746,9 @@ func (api *Api) forwardPost(c *gin.Context, endpoint string) {
 	request.Header.Set("Content-Type", "application/json; charset=utf-8")
 	request.Header.Set("Connection", "close")
 	request.Close = true
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: config.TIMEOUT,
+	}
 	response, err := client.Do(request)
 	if err != nil {
 		log.Error(err)
@@ -586,8 +777,15 @@ func (api *Api) forwardPost(c *gin.Context, endpoint string) {
 	c.JSON(ncontent.Code, ncontent)
 }
 
-// Get the status of all items in the current pipeline
-func (api *Api) FlowStatus(c *gin.Context) {
+// FlowStatus : Get the status of all items in the current pipeline
+//
+// Request params
+// - pipeline : The pipeline to get status messages for
+//
+// Response codes:
+// - 200 OK - Statuses will be the message field in the response
+// - 500 if status cannot be retrieved
+func (api *API) FlowStatus(c *gin.Context) {
 	res := make(map[string]string)
 	res["pipeline"] = c.Params.ByName("pipeline")
 	data, _ := json.Marshal(res)
@@ -610,7 +808,9 @@ func (api *Api) FlowStatus(c *gin.Context) {
 	request.Header.Set("Content-Type", "application/json; charset=utf-8")
 	request.Header.Set("Connection", "close")
 	request.Close = true
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: config.TIMEOUT,
+	}
 	response, err := client.Do(request)
 	if err != nil {
 		log.Error(err)
@@ -639,7 +839,12 @@ func (api *Api) FlowStatus(c *gin.Context) {
 	c.JSON(content.Code, content)
 }
 
-func (api *Api) PopQueue(c *gin.Context) {
+// PopQueue : Take an item off the queue
+//
+// INTERNAL used for comms between flow and assemble
+//
+// GET /queue/:pipeline/:key
+func (api *API) PopQueue(c *gin.Context) {
 	result := Result{
 		Code:   200,
 		Result: "OK",
@@ -668,7 +873,7 @@ func (api *Api) PopQueue(c *gin.Context) {
 
 		// takes a cluster object name (example: example-pipeline-test) and strips the pipeline name
 		// leaving just 'test' which should be the container name + ID (test-0, test-adf8bc4)
-		group       string = strings.Trim(strings.TrimPrefix(keyparts[2], pipeline.DnsName), "-")
+		group       string = strings.Trim(strings.TrimPrefix(keyparts[2], pipeline.DNSName), "-")
 		activeKey   string
 		activeIndex int
 	)
@@ -697,7 +902,7 @@ func (api *Api) PopQueue(c *gin.Context) {
 
 	// To prevent a race condition across api calls, we use a mutex lock on a keyslice
 	// this means we can safely handle handing commands out to the pods without
-	// multiple pods recieving the same event
+	// multiple pods receiving the same event
 	api.queueLock.Lock()
 	for activeKey = range queue {
 		var found bool = false
@@ -739,7 +944,7 @@ func (api *Api) PopQueue(c *gin.Context) {
 		var tag string = container + ":" + version
 		log.Debug("Updating state in files/", pipeline.BucketName, " for container ", tag)
 		value := b.Get([]byte(keystr))
-		body, err := base64.StdEncoding.DecodeString(string(value))
+		body, _ := base64.StdEncoding.DecodeString(string(value))
 		content := make(map[string]string)
 		json.Unmarshal(body, &content)
 		content[tag] = "in_progress"
@@ -791,8 +996,157 @@ func (api *Api) PopQueue(c *gin.Context) {
 	c.JSON(result.Code, result.Message)
 }
 
-// Updates the given queue with new event items
-func (api *Api) PerpetualQueue(c *gin.Context) {
+// Encrypt : Encrypt a message and send back the encrypted value as a base64 encoded string
+//
+// POST /encrypt
+//
+// Request parameters
+// - value : the value to encrypt
+//
+// Response codes
+// 200 OK message will contain encrypted value
+// 400 Bad request if value is empty
+// 500 Internal server error if message cannot be encrypted
+func (api *API) Encrypt(c *gin.Context) {
+	request := make(map[string]string)
+	var err error
+	if err = c.ShouldBind(&request); err != nil {
+		request["value"] = c.PostForm("value")
+	}
+
+	if val, ok := request["value"]; !ok || val == "" {
+		result := Result{
+			Code:    400,
+			Result:  "Error",
+			Message: fmt.Sprintf("Bad request whilst encrypting passphrase %+v", request),
+		}
+		c.JSON(result.Code, result)
+		return
+	}
+
+	var passphrase []byte
+	if passphrase, err = encrypt([]byte(request["value"]), api.Config.GetPassphrase("assemble")); err != nil {
+		result := Result{
+			Code:    500,
+			Result:  "Error",
+			Message: err.Error(),
+		}
+		c.JSON(result.Code, result)
+		return
+	}
+
+	result := Result{
+		Code:    200,
+		Result:  "OK",
+		Message: base64.StdEncoding.EncodeToString(passphrase),
+	}
+	c.JSON(result.Code, result)
+}
+
+// Decrypt Decrypts a given string and sends back the plaintext value
+//
+// INTERNAL Execution only
+//
+// POST /decrypt
+//
+// Request parameters:
+// - value - the value to decrypt
+// - token - the validation token to ensure decryption is allowed to take place
+//
+// Response codes:
+// - 200 OK Message will be the decrypted value
+// - 400 Bad request if value is empty, token is invalid or token matches value
+// - 500 internal server error if value cannot be decoded - Message field may offer further clarification
+//
+// This function requires both a value and a 'token' to be passed in
+// via context.
+//
+// token is the encrypted version of the passphrase used to encrypt passwords
+// and should only be available to the flow server.
+//
+// This is to offer an additional level of security at the browser level to prevent
+// attackers from decrypting a user stored password by accessing the decrypt api
+// endpoint to have the server decrypt the password for them.
+func (api *API) Decrypt(c *gin.Context) {
+	request := make(map[string]string)
+	var (
+		err            error
+		value          string
+		token          string
+		ok             bool
+		decoded        []byte
+		assemblePhrase string = api.Config.GetPassphrase("assemble")
+	)
+
+	if err = c.ShouldBind(&request); err != nil {
+		request["value"] = c.PostForm("value")
+		request["token"] = c.PostForm("token")
+	}
+
+	if value, ok = request["value"]; !ok || value == "" {
+		result := Result{
+			Code:    400,
+			Result:  "Error",
+			Message: "Bad request whilst decrypting data - missing value",
+		}
+		c.JSON(result.Code, result)
+		return
+	}
+
+	if token, ok = request["token"]; !ok || token == "" || token == value {
+		result := Result{
+			Code:    400,
+			Result:  "Error",
+			Message: "Missing token for decryption or token matches password",
+		}
+		c.JSON(result.Code, result)
+		return
+	}
+
+	decoded, _ = base64.StdEncoding.DecodeString(token)
+	if decoded, err = decrypt(decoded, assemblePhrase); err != nil || string(decoded) != assemblePhrase {
+		result := Result{
+			Code:    400,
+			Result:  "Error",
+			Message: "Failed to decode token or token is invalid",
+		}
+		c.JSON(result.Code, result)
+		return
+	}
+	var passphrase []byte
+	passphrase, _ = base64.StdEncoding.DecodeString(value)
+	if passphrase, err = decrypt(passphrase, assemblePhrase); err != nil {
+		result := Result{
+			Code:    500,
+			Result:  "Error",
+			Message: err.Error(),
+		}
+		c.JSON(result.Code, result)
+		return
+	}
+
+	result := Result{
+		Code:    200,
+		Result:  "OK",
+		Message: string(passphrase),
+	}
+	c.JSON(result.Code, result)
+}
+
+// PerpetualQueue : Updates the given queue with new event items
+//
+// INTERNAL - Automatically update the queue with new items
+//
+// GET /perpetualqueue
+//
+// Request parameters:
+// - pipeline The pipeline to execute
+// - maxitems The max items to update into the queue
+//
+// Response codes
+// - 202 Accept
+// - 500 Internal server error
+func (api *API) PerpetualQueue(c *gin.Context) {
 	request := make(map[string]interface{})
 	if err := c.ShouldBind(&request); err != nil {
 		request["pipeline"] = c.PostForm("pipeline")
@@ -860,8 +1214,8 @@ func (api *Api) PerpetualQueue(c *gin.Context) {
 	c.JSON(result.Code, result)
 }
 
-func (api *Api) walkFiles(pipeline *pipeline.Pipeline, command *pipeline.Command, count *int) {
-	log.Debug("Walking ", command.Name, " ", command.Id)
+func (api *API) walkFiles(pipeline *pipeline.Pipeline, command *pipeline.Command, count *int) {
+	log.Debug("Walking ", command.Name, " ", command.ID)
 	sources := pipeline.GetPathSources(command)
 	available := make(map[string]map[string]string)
 	for _, source := range sources {
@@ -906,7 +1260,7 @@ func (api *Api) walkFiles(pipeline *pipeline.Pipeline, command *pipeline.Command
 			for k := range available {
 				// need command container name as second
 				key := tag + ":" + pipeline.GetParent(command).Name + ":" + k
-				err := b.Put([]byte(key), []byte(command.Id))
+				err := b.Put([]byte(key), []byte(command.ID))
 				if err != nil {
 					return fmt.Errorf("create kv: %s", err)
 				}
@@ -925,7 +1279,7 @@ func (api *Api) walkFiles(pipeline *pipeline.Pipeline, command *pipeline.Command
 		if err := api.Db.Update(func(tx *bolt.Tx) error {
 			b := tx.Bucket([]byte("files")).Bucket([]byte(pipeline.BucketName))
 			for _, v := range added {
-				log.Debug("Adding ", command.Id, "to files/", pipeline.BucketName)
+				log.Debug("Adding ", command.ID, "to files/", pipeline.BucketName)
 				value := available[v]
 				value[tag] = "queued"
 				com, _ := json.Marshal(value)

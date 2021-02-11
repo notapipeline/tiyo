@@ -1,3 +1,9 @@
+// Copyright 2021 The Tiyo authors
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 package server
 
 import (
@@ -9,30 +15,30 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type BFS struct {
+// BinFileSystem : Binary file system for serving compiled assets
+type BinFileSystem struct {
 	FileSystem http.FileSystem
 	Root       string
 }
 
-func (bfs *BFS) Open(name string) (http.File, error) {
-	return bfs.FileSystem.Open(name)
+// Open : Open a given file from compiled binary file system
+func (binFS *BinFileSystem) Open(name string) (http.File, error) {
+	return binFS.FileSystem.Open(name)
 }
 
-func (bfs *BFS) Exists(prefix string, filepath string) bool {
-	var err error
-	var url string
-	url = strings.TrimPrefix(filepath, prefix)
+// Exists : Check if a given file exists in the filesystem
+func (binFS *BinFileSystem) Exists(prefix string, filepath string) bool {
+	var url string = strings.TrimPrefix(filepath, prefix)
 	if len(url) < len(filepath) {
-		_, err = bfs.FileSystem.Open(url)
-		if err != nil {
-			return false
+		if _, err := binFS.FileSystem.Open(url); err == nil {
+			return true
 		}
-		return true
 	}
 	return false
 }
 
-func GetBFS(root string) *BFS {
+// GetBinFileSystem : Get the binary filesystem object
+func GetBinFileSystem(root string) *BinFileSystem {
 	fs := &assetfs.AssetFS{
 		Asset:     Asset,
 		AssetDir:  AssetDir,
@@ -41,17 +47,19 @@ func GetBFS(root string) *BFS {
 		Fallback:  "",
 	}
 
-	return &BFS{fs, root}
+	return &BinFileSystem{fs, root}
 }
 
-func (bfs *BFS) Collection(c *gin.Context) {
+// Collection : Load a collection of files from the filsystem and send them
+// back over the assigned gin.Context
+func (binFS *BinFileSystem) Collection(c *gin.Context) {
 	result := Result{}
 	result.Code = 200
 	result.Result = "OK"
 	var err error
 	var collection = c.Params.ByName("collection")
 	result.Message = make([]string, 0)
-	result.Message, err = AssetDir(fmt.Sprintf("%s/img/%s", bfs.Root, collection))
+	result.Message, err = AssetDir(fmt.Sprintf("%s/img/%s", binFS.Root, collection))
 	if err != nil {
 		result.Code = 404
 		result.Result = "Error"

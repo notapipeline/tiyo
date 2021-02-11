@@ -1,3 +1,9 @@
+// Copyright 2021 The Tiyo authors
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 package flow
 
 import (
@@ -17,21 +23,30 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"github.com/choclab-net/tiyo/config"
-	"github.com/choclab-net/tiyo/pipeline"
+	"github.com/notapipeline/tiyo/config"
+	"github.com/notapipeline/tiyo/pipeline"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
 )
 
+// Docker client configuration
+// Create docker images for use within TIYO
 type Docker struct {
+	// Config object containing details of docker repo settings
 	Config *config.Config
+
+	// Docker client
 	Client *client.Client
 }
 
+// ErrorMessage : struct for unpacking errors from the docker client
 type ErrorMessage struct {
+
+	// The message retrieved from docker client
 	Error string
 }
 
+// NewDockerEngine : Create a new docker engine
 func NewDockerEngine(config *config.Config) *Docker {
 	log.Info("Loading docker engine")
 	docker := Docker{}
@@ -44,7 +59,7 @@ func NewDockerEngine(config *config.Config) *Docker {
 	return &docker
 }
 
-// if pod does not exist, has it previously been built?
+// ContainerExists : if pod does not exist, has it previously been built?
 // e.g. curl https://registry.hub.docker.com/v1/repositories/choclab/[NAME]/tags
 func (docker *Docker) ContainerExists(tag string) (bool, error) {
 	parts := strings.Split(tag, ":")
@@ -96,7 +111,8 @@ func (docker *Docker) ContainerExists(tag string) (bool, error) {
 	return found, nil
 }
 
-func (docker *Docker) Build(tag string) error {
+// Build the docker container
+func (docker *Docker) build(tag string) error {
 	log.Info("Building ", tag)
 	buffer := new(bytes.Buffer)
 	writer := tar.NewWriter(buffer)
@@ -159,8 +175,9 @@ func (docker *Docker) Build(tag string) error {
 	return nil
 }
 
+// Create a new container based off the pipeline element
 func (docker *Docker) Create(command *pipeline.Command) error {
-	if err := docker.Build(command.Tag); err != nil {
+	if err := docker.build(command.Tag); err != nil {
 		return err
 	}
 
