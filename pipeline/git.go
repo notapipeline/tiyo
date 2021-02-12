@@ -181,7 +181,7 @@ func (gitRepo *GitRepo) Checkout() error {
 	}
 
 	var hash *plumbing.Hash
-	if hash, err = gitRepo.repository.ResolveRevision(plumbing.Revision(gitRepo.Branch)); err != nil {
+	if hash, err = gitRepo.repository.ResolveRevision(plumbing.Revision("origin/" + gitRepo.Branch)); err != nil {
 		return err
 	}
 

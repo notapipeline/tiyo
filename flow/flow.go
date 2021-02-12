@@ -536,6 +536,9 @@ func (flow *Flow) Decrypt(what string) (string, error) {
 // Clones a git repository for each container in the set that has a git repo described
 func (flow *Flow) checkout(containers []*pipeline.Command) {
 	for _, container := range containers {
+		if container.GitRepo.RepoURL == "" {
+			continue
+		}
 		var path string = filepath.Join(
 			flow.Config.SequenceBaseDir,
 			flow.Config.Kubernetes.Volume,
@@ -567,6 +570,7 @@ func (flow *Flow) checkout(containers []*pipeline.Command) {
 		}
 		if err := container.GitRepo.Clone(path, options); err != nil {
 			log.Error(err)
+			return
 		}
 		container.GitRepo.Checkout()
 	}
