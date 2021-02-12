@@ -135,6 +135,15 @@ func (queue *Queue) GetQueueItem(container string, pod string) (int, *server.Que
 		return code, nil
 	}
 
+	parentEnv := make([]string, 0)
+	upstreamContainer := queue.Pipeline.ContainerFromCommandID(item.Command.ID)
+	if upstreamContainer != nil {
+		// pipeline first, then override with kubernetes set type environment
+		parentEnv = append(queue.Pipeline.Environment, upstreamContainer.Environment...)
+		item.Command.Environment = append(parentEnv, item.Command.Environment...)
+	} else {
+		item.Command.Environment = append(queue.Pipeline.Environment, item.Command.Environment...)
+	}
 	return code, &item
 }
 

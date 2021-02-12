@@ -539,7 +539,9 @@ func (flow *Flow) checkout(containers []*pipeline.Command) {
 		var path string = filepath.Join(
 			flow.Config.SequenceBaseDir,
 			flow.Config.Kubernetes.Volume,
+			flow.Pipeline.BucketName,
 			container.Name,
+			"src",
 		)
 		var password string = container.GitRepo.Password
 		if password == "" {
@@ -555,18 +557,17 @@ func (flow *Flow) checkout(containers []*pipeline.Command) {
 		// This aids in keeping the app secure by not holding unencrypted
 		// passwords in memory for longer than they absolutely need to be.
 
+		options := make(map[string]string)
 		if password != "" {
 			passwordDecrypted, err := flow.Decrypt(password)
 			if err != nil {
 				log.Error(err)
 			}
-
-			var options map[string]string = map[string]string{
-				"password": passwordDecrypted,
-			}
-
-			container.GitRepo.Clone(path, options)
-			container.GitRepo.Checkout()
+			options["password"] = passwordDecrypted
 		}
+		if err := container.GitRepo.Clone(path, options); err != nil {
+			log.Error(err)
+		}
+		container.GitRepo.Checkout()
 	}
 }

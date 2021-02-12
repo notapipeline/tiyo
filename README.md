@@ -29,7 +29,7 @@ container inside a Kubernetes stack. This is the equivalent of an AWS Lambda exe
 ![editor](docs/images/source-editor.png)
 
 To support this, Tiyo uses [ACE](https://ace.c9.io/) to provide an inline editor for your code. Alongside this. Tiyo
-supports a number of pre-built containers, which when running in Bio-informatics mode, come from
+supports a number of pre-built containers, which when running as a bio-informatics platform, come from
 [Biocontainers](https://biocontainers.pro/).
 
 ## Container languages

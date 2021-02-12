@@ -28,7 +28,7 @@ RUN if ! which useradd; then \
 
 WORKDIR /tiyo
 COPY tiyo /usr/bin/tiyo
-RUN chmod +x /usr/bin/tiyo
+RUN chmod 755 /usr/bin/tiyo
 COPY config.json tiyo.json
 RUN chmod 644 tiyo.json
 USER tiyo

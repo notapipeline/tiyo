@@ -184,7 +184,7 @@
         <section class="uk-position-medium uk-position-top-left uk-width-1-2" id="scan">
             <h3 class="pagetitle">Contents</h3>
             <div class="uk-vertical-align uk-text-center uk-width-1-1">
-                <div class="uk-vertical-align-middle uk-grid uk-width-3-4" id="d">
+                <div class="uk-vertical-align-middle uk-grid uk-width-1-1" id="d">
                     <div class="uk-width-1-3"><input class="uk-form-small" type="text" id="pbucket" placeholder="Bucket name"></div>
                     <div class="uk-width-1-3"><input class="uk-form-small" type="text" id="pkey" placeholder="Key Prefix"></div>
                     <div class="uk-width-1-3"><a class="uk-width-1-1 uk-button uk-button-primary uk-button-small" onclick="scan()">List</a></div>

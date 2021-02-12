@@ -7,6 +7,7 @@
 package pipeline
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	git "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
+	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -37,6 +39,15 @@ type GitRepo struct {
 
 	// The loaded git repository
 	repository *git.Repository
+
+	// options used for clone
+	cloneoptions git.CloneOptions
+
+	// options used for pull
+	pulloptions git.PullOptions
+
+	// keyfile name
+	keyfile string
 }
 
 // NewGitRepo : Create a git repository object
@@ -47,7 +58,6 @@ func NewGitRepo() *GitRepo {
 
 // Set up the GitRepo from form input
 func (gitRepo *GitRepo) Configure(values map[string]interface{}) {
-	log.Debug(values)
 	if values["repo"] != nil {
 		gitRepo.RepoURL = values["repo"].(string)
 	}
@@ -65,6 +75,7 @@ func (gitRepo *GitRepo) Configure(values map[string]interface{}) {
 	}
 }
 
+// HasKey : Check if a given map has a particular key
 func (gitRepo *GitRepo) HasKey(where map[string]string, key string) bool {
 	if _, ok := where[key]; ok {
 		return true
@@ -72,37 +83,93 @@ func (gitRepo *GitRepo) HasKey(where map[string]string, key string) bool {
 	return false
 }
 
-func (gitRepo *GitRepo) Clone(destination string, options map[string]string) {
-	if gitRepo.HasKey(options, "key") && gitRepo.HasKey(options, "password") {
-		gitRepo.ssh(destination, options["key"], options["password"])
-	} else if gitRepo.HasKey(options, "password") {
-		gitRepo.basic(destination, options["password"])
-	}
-}
-
-// Clone : Clone out a git repository from source
-func (gitRepo *GitRepo) basic(destination string, password string) error {
+// Clone : Clone out a given repo
+func (gitRepo *GitRepo) Clone(destination string, options map[string]string) error {
 	log.Info("Cloning ", gitRepo.RepoURL)
 	var basename string = strings.TrimSuffix(filepath.Base(gitRepo.RepoURL), ".git")
-	var path = destination + "/" + basename
-	var err error
-
-	if gitRepo.repository, err = git.PlainClone(path, false, &git.CloneOptions{
-		Auth: &http.BasicAuth{
-			Username: gitRepo.Username,
-			Password: password,
-		},
-		URL:               gitRepo.RepoURL,
-		RecurseSubmodules: git.DefaultSubmoduleRecursionDepth,
-		Progress:          os.Stdout,
-	}); err != nil {
+	destination = destination + "/" + basename
+	gitRepo.keyfile = destination + ".key"
+	if err := gitRepo.buildOptions(options); err != nil {
 		return err
+	}
+
+	if _, err := os.Stat(destination); os.IsExist(err) {
+		if gitRepo.repository, err = git.PlainOpen(destination); err != nil {
+			return err
+		}
+	} else {
+		var err error
+		if gitRepo.repository, err = git.PlainClone(destination, false, &gitRepo.cloneoptions); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
-func (gitRepo *GitRepo) ssh(destination string, key string, password string) {
-	// Not implemented
+func (gitRepo *GitRepo) buildOptions(options map[string]string) error {
+	gitRepo.cloneoptions = git.CloneOptions{
+		URL:               gitRepo.RepoURL,
+		RecurseSubmodules: git.DefaultSubmoduleRecursionDepth,
+		Progress:          os.Stdout,
+	}
+
+	gitRepo.pulloptions = git.PullOptions{
+		RemoteName:        "origin",
+		SingleBranch:      true,
+		Depth:             1,
+		RecurseSubmodules: git.DefaultSubmoduleRecursionDepth,
+		Progress:          os.Stdout,
+		Force:             false,
+	}
+
+	if gitRepo.HasKey(options, "key") && gitRepo.HasKey(options, "password") {
+		if err := gitRepo.sshAuth(options["key"], options["password"]); err != nil {
+			return err
+		}
+	} else if gitRepo.HasKey(options, "password") {
+		gitRepo.basicAuth(options["password"])
+	}
+
+	return nil
+}
+
+// sshAuth : Generate SSH authentication
+func (gitRepo *GitRepo) sshAuth(key string, password string) error {
+	if _, err := os.Stat(key); err != nil {
+		file, err := os.Create(gitRepo.keyfile)
+		if err != nil {
+			return fmt.Errorf("Failed to Create SSH key for %s. %s", gitRepo.RepoURL, err)
+		}
+		defer file.Close()
+		if _, err := file.WriteString(key); err != nil {
+			return fmt.Errorf("Failed to write ssh key contents for %s. Error was: %s", gitRepo.RepoURL, err)
+		}
+
+		return fmt.Errorf("read file %s failed %s", key, err.Error())
+	} else {
+		gitRepo.keyfile = key
+	}
+
+	// Clone the given repository to the given directory
+	publicKeys, err := ssh.NewPublicKeysFromFile("git", key, password)
+	if err != nil {
+		return fmt.Errorf("generate publickeys failed: %s", err.Error())
+	}
+	gitRepo.cloneoptions.Auth = publicKeys
+	gitRepo.pulloptions.Auth = publicKeys
+	return nil
+}
+
+// Clone : Set up basic auth options
+func (gitRepo *GitRepo) basicAuth(password string) {
+	gitRepo.cloneoptions.Auth = &http.BasicAuth{
+		Username: gitRepo.Username,
+		Password: password,
+	}
+	gitRepo.pulloptions.Auth = &http.BasicAuth{
+		Username: gitRepo.Username,
+		Password: password,
+	}
 }
 
 // Checkout : Checks out a given branch or revision
@@ -121,6 +188,10 @@ func (gitRepo *GitRepo) Checkout() error {
 	if err = worktree.Checkout(&git.CheckoutOptions{
 		Hash: *hash,
 	}); err != nil {
+		return err
+	}
+
+	if err := worktree.Pull(&gitRepo.pulloptions); err != nil {
 		return err
 	}
 	return nil

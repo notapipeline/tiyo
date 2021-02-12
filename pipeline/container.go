@@ -41,6 +41,9 @@ type Container struct {
 
 	// The pipeline this container belongs to
 	Pipeline *Pipeline
+
+	// Environment settings for the all pods under this set
+	Environment []string
 }
 
 // NewContainer : Construct a new container instance
@@ -49,6 +52,7 @@ func NewContainer(pipeline *Pipeline, cell map[string]interface{}) *Container {
 		Pipeline:  pipeline,
 		LastCount: 0,
 	}
+	container.Environment = make([]string, 0)
 
 	if cell["id"] != nil {
 		container.ID = cell["id"].(string)
@@ -70,6 +74,13 @@ func NewContainer(pipeline *Pipeline, cell map[string]interface{}) *Container {
 		container.Children = make([]string, 0)
 		for _, item := range cell["embeds"].([]interface{}) {
 			container.Children = append(container.Children, item.(string))
+		}
+	}
+
+	if cell["environment"] != nil {
+		envvars := cell["environment"].([]interface{})
+		for _, value := range envvars {
+			container.Environment = append(container.Environment, value.(string))
 		}
 	}
 

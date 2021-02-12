@@ -56,7 +56,7 @@ class Container {
         '        <td><label for="appscript">script</label></td>'+
         '        <td><input type="checkbox" id="appscript" />'+
         '            <input type="button" id="editappscript" value="edit" onclick="pipeline.showEditor()" />' +
-        '            <input type="button" id="editappenvironment" value="environment" onclick="pipeline.showEnvironment()" />' +
+        '            <input type="button" value="environment" onclick="pipeline.showEnvironment()" />' +
         '        </td>'+
         '      </tr>'+
         '    </table>'+
@@ -134,7 +134,6 @@ class Container {
             $('#editappscript').prop('disabled', true);
         }
 
-        console.log(event.offsetX);
         element.css({
             "position": "absolute",
             "display": "block",

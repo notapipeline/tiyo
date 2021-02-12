@@ -19,6 +19,10 @@ class Kubernetes {
         '      <td><label for="containerscale">Scale</label></td>'+
         '      <td><input id="containerscale" value=""></td>'+
         '    </tr>'+
+        '    <tr>'+
+        '      <td></td>'+
+        '      <td><input type="button" value="environment" onclick="pipeline.showEnvironment()"></td>'+
+        '    </tr>'+
         '  </table>'+
         '  <div style="float: right;">'+
         '    <a class="uk-button-small cancel">cancel</a>'+
@@ -118,6 +122,7 @@ joint.shapes.container.Kubernetes = joint.shapes.basic.Generic.extend({
         settype: "",
         size: { width: 250, height: 250 },
         groupType: true,
+        environment: [],
         attrs: {
             rect: { fill: '#fff', 'fill-opacity': '0', stroke: 'black', width: 100, height: 60 },
             text: { 'font-size': 14, text: '', 'ref-x': .5, 'ref-y': -15, ref: 'rect', 'y-alignment': 'top', 'x-alignment': 'middle', fill: 'black' },

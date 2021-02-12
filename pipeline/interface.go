@@ -338,7 +338,7 @@ func (pipeline *Pipeline) Unique(matchers []Matcher) []Matcher {
 	return list
 }
 
-// GetPathSources :
+// GetPathSources : get a list of commands which feed the current command
 func (pipeline *Pipeline) GetPathSources(source *Command) []string {
 	links := pipeline.GetLinksTo(source)
 	sources := make([]string, 0)
@@ -389,6 +389,18 @@ func (pipeline *Pipeline) ContainerFromServiceName(serviceName string) *Containe
 	for _, group := range pipeline.Containers {
 		if strings.HasSuffix(serviceName, group.Name) {
 			return group
+		}
+	}
+	return nil
+}
+
+// ContainerFromCommandID : Get a container from a command id
+func (pipeline *Pipeline) ContainerFromCommandID(commandID string) *Container {
+	for _, container := range pipeline.Containers {
+		for _, element := range container.GetChildren() {
+			if element.ID == commandID {
+				return container
+			}
 		}
 	}
 	return nil
@@ -445,7 +457,6 @@ func GetPipeline(config *config.Config, name string) (*Pipeline, error) {
 
 	if environment, ok := content["environment"]; ok {
 		env := environment.([]interface{})
-		pipeline.Environment = make([]string, 0)
 		for _, item := range env {
 			pipeline.Environment = append(pipeline.Environment, item.(string))
 		}
@@ -474,7 +485,6 @@ func GetPipeline(config *config.Config, name string) (*Pipeline, error) {
 			if pipeline.Config.Docker.Registry != "" {
 				command.Tag = pipeline.Config.Docker.Registry + "/" + command.Tag
 			}
-			pipeline.AddEnv(command)
 			pipeline.Commands[command.ID] = command
 		case "container.Kubernetes":
 			container := NewContainer(&pipeline, cell)
@@ -496,10 +506,6 @@ func GetPipeline(config *config.Config, name string) (*Pipeline, error) {
 }
 
 // AddEnv : Add the full pipeline environment to a command
-// This is normally called by flow immediatly prior to the command
-// being sent out to the container. This will help keep memory
-// footprint smaller during standard execution when dealing with
-// large pipeline environments and/or multiple pipelines on one flow
 func (pipeline *Pipeline) AddEnv(command *Command) {
-	command.Environment = append(command.Environment, pipeline.Environment...)
+	command.Environment = append(pipeline.Environment, command.Environment...)
 }
