@@ -272,7 +272,9 @@ function pipelineExecuting() {
 }
 
 function handleError(err) {
-    error(err.responseJSON.message);
+    if (err && err.responseJSON) {
+        error(err.responseJSON.message);
+    }
 }
 
 function displayMessage(element) {

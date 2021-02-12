@@ -201,9 +201,27 @@ func NewConfig() (*Config, error) {
 		config.Kubernetes.ConfigFile = "config"
 	}
 
-	_, err = os.Stat(config.Kubernetes.ConfigFile)
-	if os.IsNotExist(err) {
-		config.Kubernetes.ConfigFile = config.ConfigBase + "/" + config.Kubernetes.ConfigFile
+	var home string
+	if home, err = os.UserHomeDir(); err != nil {
+		// assume running as root
+		home = "/root"
+	}
+
+	// try to load config in order
+	// - path defined in config
+	// - /etc/tiyo/{config}
+	// - ~/.kube/{config}
+	if _, err = os.Stat(config.Kubernetes.ConfigFile); os.IsNotExist(err) {
+		var kubeconfig = config.ConfigBase + "/" + config.Kubernetes.ConfigFile
+		if _, err = os.Stat(kubeconfig); os.IsNotExist(err) {
+			config.Kubernetes.ConfigFile = home + "/.kube/" + config.Kubernetes.ConfigFile
+		} else {
+			config.Kubernetes.ConfigFile = kubeconfig
+		}
+
+		if _, err = os.Stat(config.Kubernetes.ConfigFile); os.IsNotExist(err) {
+			return nil, err
+		}
 	}
 
 	return &config, nil

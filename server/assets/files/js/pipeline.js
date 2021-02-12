@@ -28,6 +28,8 @@ class Pipeline {
     pipeline = "";
     executing = false;
     lastStatus = null;
+    toolsTimeout = null;
+    toolsId = null;
 
     gauges = {
         pipelineCpu: {
@@ -416,6 +418,10 @@ class Pipeline {
 
     elementMouseOver(view, event, x, y) {
         var port = view.findAttribute('port', event.target);
+        var modelId = view.model.id;
+        if (this.toolsTimeout != null && this.toolsId == modelId) {
+            clearTimeout(this.toolsTimeout);
+        }
         if (activeLink && activeLink.attributes.type == 'link' && port && port == 'o') {
             // hover for half a second before attaching
             this.attach = true;
@@ -430,7 +436,12 @@ class Pipeline {
     }
 
     elementMouseLeave(view, event, x, y) {
-        setTimeout(function(v) { v.removeTools() }, 500, view);
+        this.toolsId = view.model.id;
+        this.toolsTimeout = setTimeout(function(v) {
+            v.removeTools();
+            this.toolsTimeout = null;
+            this.toolsId = null;
+        }.bind(this), 500, view);
         this.attach = false;
         // global activeLink
         if (!activeLink || !this.attached) { return; }
@@ -587,8 +598,11 @@ class Pipeline {
     }
 
     getTransformPoint() {
-        // global dragEvent
-        return this.offsetToLocalPoint(dragEvent.offsetX, dragEvent.offsetY)
+        // dragEvent from global space
+        return this.offsetToLocalPoint(
+            dragEvent.offsetX || dragEvent.layerX,
+            dragEvent.offsetY || dragEvent.layerY
+        )
     }
 
     offsetToLocalPoint(x, y) {
@@ -689,14 +703,16 @@ class Pipeline {
         this.graph.getCells().forEach((cell) => {
             if (cell.attributes.type == 'container.Kubernetes') {
                 var scale = cell.attributes.scale;
-                for (var i=0; i<cell.attributes.embeds.length; i++) {
-                    var id = cell.attributes.embeds[i];
-                    this.graph.getCells().forEach((element) => {
-                        if (element.attributes.id == id && element.attributes.type == 'container.Container') {
-                            cpu += (this.parseCpu(element.attributes.cpu) * scale);
-                            mem += (this.parseMemory(element.attributes.memory) * scale);
-                        }
-                    });
+                if (Object.keys(cell.attributes).includes("embeds")) {
+                    for (var i=0; i<cell.attributes.embeds.length; i++) {
+                        var id = cell.attributes.embeds[i];
+                        this.graph.getCells().forEach((element) => {
+                            if (element.attributes.id == id && element.attributes.type == 'container.Container') {
+                                cpu += (this.parseCpu(element.attributes.cpu) * scale);
+                                mem += (this.parseMemory(element.attributes.memory) * scale);
+                            }
+                        });
+                    }
                 }
             }
         });

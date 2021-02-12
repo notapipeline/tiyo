@@ -13,10 +13,10 @@ import (
 	"os"
 	"path"
 
-	"github.com/notapipeline/tiyo/config"
 	"github.com/gin-contrib/multitemplate"
 	"github.com/gin-contrib/static"
 	"github.com/gin-gonic/gin"
+	"github.com/notapipeline/tiyo/config"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -58,8 +58,12 @@ func NewServer() *Server {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
+	var err error
 	server.Engine = gin.Default()
-	server.Config, _ = config.NewConfig()
+	if server.Config, err = config.NewConfig(); err != nil {
+		log.Error("Failed to load config ", err)
+		return nil
+	}
 	server.Init()
 	return &server
 }
