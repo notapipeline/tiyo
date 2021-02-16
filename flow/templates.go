@@ -50,19 +50,20 @@ upstream {{.Nginx.Upstream.Name}} {
 {{- end}}
 }
 
+{{- range $listener := .Nginx.Listeners }}
 server {
-{{- if eq .Nginx.Listener.Protocol "http"}}
-    listen {{.Nginx.Listener.Listen}};
-{{- else if eq .Nginx.Listener.Protocol "https"}}
-    listen {{.Nginx.Listener.Listen}} ssl;
+{{- if eq $listener.Protocol "http"}}
+    listen {{$listener.Listen}};
+{{- else if eq $listener.Protocol "https"}}
+    listen {{$listener.Listen}} ssl;
 {{- end}}
-    server_name {{.Nginx.Listener.Hostname}};
-{{- if eq .Nginx.Listener.Protocol "https" -}}
+    server_name {{$listener.Hostname}};
+{{- if eq $listener.Protocol "https"}}
     ssl                  on;
-    ssl_certificate      /etc/ssl/{{.Nginx.Listener.Domain}}/{{.Nginx.Upstream.Name}}.crt;
-    ssl_certificate_key  /etc/ssl/{{.Nginx.Listener.Domain}}/{{.Nginx.Upstream.Name}}.key;
+    ssl_certificate      /etc/ssl/{{$listener.Hostname}}/certificate.crt;
+    ssl_certificate_key  /etc/ssl/{{$listener.Hostname}}/certificate.key;
 {{end}}
-{{- range $location := .Nginx.Listener.Locations}}
+{{- range $location := $listener.Locations}}
     location {{$location.Path}} {
         proxy_pass  http://{{$location.Upstream}};
         proxy_set_header  Host $host;
@@ -74,5 +75,9 @@ server {
         proxy_set_header  Connection 'upgrade';
     }
 {{- end}}
+{{- if $listener.Return}}
+    return {{$listener.Return.Code}} {{$listener.Return.Address}};
+{{end}}
 }
+{{end}}
 `))
