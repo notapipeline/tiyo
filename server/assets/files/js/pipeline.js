@@ -852,7 +852,22 @@ class Pipeline {
         this.editor.session.on('change', function(delta) {
             this.editorchanged = delta;
         }.bind(this));
-        this.editor.session.setMode('ace/mode/' + this.appelement.attributes.element);
+
+        var mode = this.appelement.attributes.element;
+        if (!this.appelement.attributes.custom) {
+            mode = this.appelement.attributes.command.split(" ")[0];
+        }
+
+        // This needs to be more dynamic / extensible
+        var supportedLanguages = [
+            'golang', 'groovy', 'javascript', 'perl', 'python', 'php',
+            'r', 'sh', 'json', 'dockerfile', 'ruby', 'julia'
+        ];
+        if (!supportedLanguages.includes(mode)) {
+            mode = 'sh';
+        }
+
+        this.editor.session.setMode('ace/mode/' + mode);
 
         UIkit.modal('#scriptentry', {
             escClose: false,

@@ -160,8 +160,10 @@ func (syphon *Syphon) execute(queueItem *server.QueueItem) {
 	var baseDir string = filepath.Join(syphon.config.SequenceBaseDir, queueItem.PipelineFolder, queueItem.SubFolder)
 	log.Info("Received filename ", filepath.Join(baseDir, queueItem.Filename), " with command ", command)
 
-	var exitCode int
-	if exitCode = command.Execute(baseDir, syphon.self, queueItem.Filename, queueItem.Event); exitCode != 0 {
+	var libraryDir string = filepath.Join(syphon.config.SequenceBaseDir, "library")
+
+	var exitCode int = command.Execute(baseDir, syphon.self, queueItem.Filename, queueItem.Event, libraryDir)
+	if exitCode != 0 {
 		// if exitcode is not 0, add the command back to the queue
 		// requeue should send logs back with the command
 		syphon.requeue(queueItem)

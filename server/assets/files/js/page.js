@@ -128,8 +128,9 @@ function loadApplications()
             ).attr(
                 '.label/text', elem.textContent.trim()
             );
+
             cell.attributes.name = elem.textContent.trim();
-            cell.attributes.script = false;
+            cell.attributes.script = true;
             cell.attributes.custom = false;
             pipeline.checkEmbed(cell, point);
 

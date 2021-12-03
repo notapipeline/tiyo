@@ -124,15 +124,7 @@ class Container {
         $('#appcpu').val(view.model.attributes.cpu);
         $('#appmemory').val(view.model.attributes.memory);
 
-        if (view.model.attributes.script) {
-            $('#appscript').prop('disabled', false);
-            $('#appscript').prop('checked', true);
-            $('#editappscript').prop('disabled', false);
-        } else {
-            $('#appscript').prop('disabled', true);
-            $('#appscript').prop('checked', false);
-            $('#editappscript').prop('disabled', true);
-        }
+        $('#appscript').prop('checked', view.model.attributes.script);
 
         element.css({
             "position": "absolute",
@@ -194,7 +186,7 @@ joint.shapes.container.Container = joint.shapes.devs.Model.extend({
 
         autostart: false,
         name: "",
-        lang: "",
+        element: "",
         command: "",
         arguments: "",
         script: false,

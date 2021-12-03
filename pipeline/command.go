@@ -329,7 +329,7 @@ func (command *Command) writeScript() (string, error) {
 // and process arguments then executing the command, terminating as necesssary
 // after the configured timeout, and capturing the output for later storage and
 // retrieval
-func (command *Command) Execute(directory string, subdir string, filename string, event string) int {
+func (command *Command) Execute(directory string, subdir string, filename string, event string, libraryDir string) int {
 	log.Info("Using environment:")
 	var environment []string = append(os.Environ(), command.Environment...)
 
@@ -357,22 +357,36 @@ func (command *Command) Execute(directory string, subdir string, filename string
 	// how files are separated
 	for _, item := range strings.Split(command.Args, " ") {
 		log.Info("Appending argument ", item)
+
+		var flag, _ = regexp.Compile(`--tiyo-flag(-[a-zA-Z]+)`)
+		var library, _ = regexp.Compile(`--tiyo-library="(.*)"`)
+
+		// switch out library paths and custom file flags
+		switch {
+		case flag.MatchString(item):
+			command.FileSeperator = flag.FindStringSubmatch(item)[1]
+			continue
+		case library.MatchString(item):
+			command.ProcessArgs = append(
+				command.ProcessArgs,
+				filepath.Join(libraryDir, library.FindStringSubmatch(item)[1]),
+			)
+			continue
+		}
+
+		// Switch all other tiyo file separator flags
 		switch item {
+		// comma separated index
 		case "--tiyo-csi":
 			command.FileSeperator = ","
-			break
+		// comma space separated index
 		case "--tiyo-cssi":
 			command.FileSeperator = ", "
-			break
+		// space comma space separated index
 		case "--tiyo-scssi":
 			command.FileSeperator = " , "
-			break
-		case "--tiyo-flag-f":
-			command.FileSeperator = "-f"
-			break
 		default:
 			command.ProcessArgs = append(command.ProcessArgs, item)
-			break
 		}
 	}
 
