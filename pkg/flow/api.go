@@ -12,8 +12,8 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/notapipeline/tiyo/config"
-	"github.com/notapipeline/tiyo/server"
+	"github.com/notapipeline/tiyo/pkg/config"
+	"github.com/notapipeline/tiyo/pkg/server"
 	log "github.com/sirupsen/logrus"
 )
 

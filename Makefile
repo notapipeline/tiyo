@@ -1,5 +1,5 @@
 build:
-	go-bindata-assetfs -o server/assets.go -pkg server server/assets/...
+	go-bindata-assetfs -o pkg/server/assets.go -pkg server assets/...
 	CGO_ENABLED=0 go build .
 
 install:

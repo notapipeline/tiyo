@@ -9,7 +9,7 @@ package main
 import (
 	"os"
 
-	"github.com/notapipeline/tiyo/command"
+	"github.com/notapipeline/tiyo/pkg/command"
 	log "github.com/sirupsen/logrus"
 )
 

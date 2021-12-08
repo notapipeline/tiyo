@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/coreos/go-systemd/dbus"
-	"github.com/notapipeline/tiyo/config"
+	"github.com/notapipeline/tiyo/pkg/config"
 	log "github.com/sirupsen/logrus"
 	networkv1 "k8s.io/api/networking/v1"
 )

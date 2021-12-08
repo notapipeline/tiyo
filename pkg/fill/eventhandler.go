@@ -14,7 +14,7 @@ import (
 	"net/http"
 	"path/filepath"
 
-	"github.com/notapipeline/tiyo/config"
+	"github.com/notapipeline/tiyo/pkg/config"
 	"github.com/rjeczalik/notify"
 	log "github.com/sirupsen/logrus"
 )

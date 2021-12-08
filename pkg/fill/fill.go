@@ -22,8 +22,8 @@ import (
 	"path/filepath"
 	"regexp"
 
-	"github.com/notapipeline/tiyo/config"
-	"github.com/notapipeline/tiyo/pipeline"
+	"github.com/notapipeline/tiyo/pkg/config"
+	"github.com/notapipeline/tiyo/pkg/pipeline"
 	"github.com/rjeczalik/notify"
 	log "github.com/sirupsen/logrus"
 )

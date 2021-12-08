@@ -17,7 +17,7 @@ import (
 	"github.com/gin-contrib/multitemplate"
 	"github.com/gin-contrib/static"
 	"github.com/gin-gonic/gin"
-	"github.com/notapipeline/tiyo/config"
+	"github.com/notapipeline/tiyo/pkg/config"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -129,7 +129,7 @@ func (server *Server) Run() int {
 		fmt.Println(err)
 		return 1
 	}
-	bfs := GetBinFileSystem("server/assets/files")
+	bfs := GetBinFileSystem("assets/files")
 	server.Engine.Use(static.Serve("/static", bfs))
 
 	render := multitemplate.New()

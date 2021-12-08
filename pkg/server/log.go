@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/notapipeline/tiyo/config"
+	"github.com/notapipeline/tiyo/pkg/config"
 	log "github.com/sirupsen/logrus"
 )
 

@@ -21,8 +21,8 @@ import (
 
 	"github.com/boltdb/bolt"
 	"github.com/gin-gonic/gin"
-	"github.com/notapipeline/tiyo/config"
-	"github.com/notapipeline/tiyo/pipeline"
+	"github.com/notapipeline/tiyo/pkg/config"
+	"github.com/notapipeline/tiyo/pkg/pipeline"
 	log "github.com/sirupsen/logrus"
 )
 

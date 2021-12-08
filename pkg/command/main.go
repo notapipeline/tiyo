@@ -13,11 +13,11 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/notapipeline/tiyo/config"
-	"github.com/notapipeline/tiyo/fill"
-	"github.com/notapipeline/tiyo/flow"
-	"github.com/notapipeline/tiyo/server"
-	"github.com/notapipeline/tiyo/syphon"
+	"github.com/notapipeline/tiyo/pkg/config"
+	"github.com/notapipeline/tiyo/pkg/fill"
+	"github.com/notapipeline/tiyo/pkg/flow"
+	"github.com/notapipeline/tiyo/pkg/server"
+	"github.com/notapipeline/tiyo/pkg/syphon"
 	log "github.com/sirupsen/logrus"
 )
 

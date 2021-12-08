@@ -45,11 +45,11 @@ func NewPortLink(cell map[string]interface{}) *PortLink {
 	attrib := cell["attributes"].(map[string]interface{})
 
 	if attrib["source"] != nil {
-		port.SourcePort = attrib["source"].(int)
+		port.SourcePort = int(attrib["source"].(float64))
 	}
 
 	if attrib["dest"] != nil {
-		port.DestPort = attrib["destintation"].(int)
+		port.DestPort = int(attrib["dest"].(float64))
 	}
 
 	if attrib["address"] != nil {

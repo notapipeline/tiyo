@@ -15,9 +15,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/notapipeline/tiyo/config"
-	"github.com/notapipeline/tiyo/pipeline"
-	"github.com/notapipeline/tiyo/server"
+	"github.com/notapipeline/tiyo/pkg/config"
+	"github.com/notapipeline/tiyo/pkg/pipeline"
+	"github.com/notapipeline/tiyo/pkg/server"
 	log "github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"

@@ -26,8 +26,8 @@ import (
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
-	"github.com/notapipeline/tiyo/config"
-	"github.com/notapipeline/tiyo/pipeline"
+	"github.com/notapipeline/tiyo/pkg/config"
+	"github.com/notapipeline/tiyo/pkg/pipeline"
 )
 
 // Docker client configuration
@@ -185,7 +185,7 @@ func (docker *Docker) build(tag string) error {
 	log.Debug(options)
 	response, err := docker.Client.ImageBuild(context.Background(), stream, options)
 	if err != nil {
-		return err
+		return fmt.Errorf("DOCKER: Failed to build container. Message was: %s", err.Error())
 	}
 
 	defer response.Body.Close()

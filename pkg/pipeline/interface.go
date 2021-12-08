@@ -20,7 +20,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/notapipeline/tiyo/config"
+	"github.com/notapipeline/tiyo/pkg/config"
 	log "github.com/sirupsen/logrus"
 )
 

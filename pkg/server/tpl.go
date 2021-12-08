@@ -18,7 +18,7 @@ func LoadTemplates(paths ...string) *template.Template {
 	var path string
 	var data []byte
 	for _, path = range paths {
-		data, err = Asset("server/assets/templates/" + path)
+		data, err = Asset("assets/templates/" + path)
 		if err != nil {
 			fmt.Println(err)
 		}
