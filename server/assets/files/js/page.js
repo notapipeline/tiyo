@@ -227,7 +227,7 @@ function loadMenu() {
                         openEnvironmentPopup(pipeline.graph);
                         break;
                     case "credentials":
-                        openCredentialsPopup();
+                        openCredentialsPopup(pipeline.graph);
                         break;
                 }
                 break;
@@ -238,6 +238,11 @@ function loadMenu() {
 function openEnvironmentPopup(whatfor) {
     pipeline.appelement = whatfor;
     pipeline.showEnvironment();
+}
+
+function openCredentialsPopup(whatfor) {
+    pipeline.appelement = whatfor;
+    pipeline.showCredentials();
 }
 
 /**

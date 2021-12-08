@@ -95,8 +95,10 @@ func (flow *Flow) Init() {
 // Create : Creates a new docker container image if one is not already found in the library
 func (flow *Flow) Create(instance *pipeline.Command) error {
 	log.Info("flow - Creating new container instance for ", instance.Name, " ", instance.ID)
+
+	// Not sure this is still required or true...
+	/*var containerExists bool
 	var err error
-	var containerExists bool
 	containerExists, err = flow.Docker.ContainerExists(instance.Tag)
 	if err != nil {
 		return err
@@ -105,7 +107,7 @@ func (flow *Flow) Create(instance *pipeline.Command) error {
 	if containerExists && !flow.update {
 		log.Info("Not building image for ", instance.Image, " Image exists")
 		return nil
-	}
+	}*/
 
 	path := fmt.Sprintf("containers/%s", instance.Tag)
 	if _, err := os.Stat(path); os.IsNotExist(err) {
@@ -209,7 +211,7 @@ func (flow *Flow) CopyTiyoBinary() error {
 
 // WriteConfig : Create a basic config for Syphon to communicate with the current flow
 func (flow *Flow) WriteConfig() error {
-	log.Debug("Creating stub config for container wrap")
+	log.Info("Creating stub config for container wrap")
 	path, _ := os.Getwd()
 	config := struct {
 		SequenceBaseDir string      `json:"sequenceBaseDir"`
@@ -279,7 +281,8 @@ func (flow *Flow) Execute() {
 		log.Debug("Pipeline start item", command)
 		err := flow.Create(command)
 		if err != nil {
-			log.Fatal(err)
+			log.Error(err)
+			return
 		}
 	}
 
@@ -432,12 +435,14 @@ func (flow *Flow) Run() int {
 func (flow *Flow) triggerServices() {
 	for _, container := range flow.Pipeline.Containers {
 		for _, instance := range container.GetChildren() {
+			log.Infof("Validating command %s as service command", instance.Name)
 			var execute bool = instance.AutoStart
 			if instance.ExposePort > 0 {
 				execute = true
 			}
 
 			if !execute {
+				log.Infof("%s is not a service command - skipping", instance.Name)
 				continue
 			}
 
@@ -556,10 +561,10 @@ func (flow *Flow) checkout(containers []*pipeline.Command) {
 				password = flow.Pipeline.Credentials[container.GitRepo.Username]
 			}
 		}
+
 		// There is no need to decrypt the password until it is requried.
 		// This aids in keeping the app secure by not holding unencrypted
 		// passwords in memory for longer than they absolutely need to be.
-
 		options := make(map[string]string)
 		if password != "" {
 			passwordDecrypted, err := flow.Decrypt(password)

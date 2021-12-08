@@ -237,6 +237,7 @@ func (queue *Queue) createBuckets() {
 
 // perpetual : run the queue every n seconds to move events from the
 // event buckets to the queue bucket
+// There is a better way than the time.sleep - see thor service
 func (queue *Queue) perpetual() {
 	log.Info("Setting up perpetual queue for ", queue.Pipeline.Name)
 	var first bool = true

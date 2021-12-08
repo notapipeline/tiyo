@@ -752,7 +752,7 @@ func (kube *Kubernetes) CreateService(name string, instances []*pipeline.Command
 	ports := kube.GetServicePorts(instances)
 	log.Debug("Found ", len(ports), " ports for service ", name)
 	if len(ports) == 0 {
-		log.Info("Not creating ", name, " no ports to bind")
+		log.Infof("Not creating %s service. No ports to bind", name)
 		return ""
 	}
 	log.Info("Creating service ", name)

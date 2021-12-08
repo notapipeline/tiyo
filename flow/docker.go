@@ -14,6 +14,7 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -23,10 +24,10 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"github.com/notapipeline/tiyo/config"
-	"github.com/notapipeline/tiyo/pipeline"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
+	"github.com/notapipeline/tiyo/config"
+	"github.com/notapipeline/tiyo/pipeline"
 )
 
 // Docker client configuration
@@ -63,8 +64,16 @@ func NewDockerEngine(config *config.Config) *Docker {
 // e.g. curl https://registry.hub.docker.com/v1/repositories/choclab/[NAME]/tags
 func (docker *Docker) ContainerExists(tag string) (bool, error) {
 	parts := strings.Split(tag, ":")
-	var name string = parts[0]
-	var version string = parts[1]
+	var (
+		err             error
+		name            string = parts[0]
+		version         string = parts[1]
+		apiAddress      string = "https://registry.hub.docker.com/v1/repositories"
+		address         string = fmt.Sprintf("%s/%s/tags", apiAddress, name)
+		response        *http.Response
+		retry, maxretry int = 0, 100
+	)
+
 	log.Info("Checking registry for ", name, " ", version)
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{
 		InsecureSkipVerify: docker.Config.UseInsecureTLS,
@@ -74,15 +83,27 @@ func (docker *Docker) ContainerExists(tag string) (bool, error) {
 	// This will be potentially very different for artifactory/nexus/quay and
 	// it may not be instantly recognisable from the URL that the API is a
 	// different endpoint.
-	var apiAddress string = "https://registry.hub.docker.com/v1/repositories"
-	var address string = fmt.Sprintf("%s/%s/tags", apiAddress, name)
-	log.Debug("Making request to ", address)
-	response, err := http.Get(address)
-	if err != nil {
-		return false, err
-	}
-	if response.StatusCode != 200 {
-		return false, nil
+	for {
+		log.Debug("Making request to ", address)
+		response, err = http.Get(address)
+		if errors.Is(err, context.DeadlineExceeded) {
+			// This is probably temporary and a retry
+			// will allow it to succeed.
+			continue
+		} else if response != nil && response.StatusCode == http.StatusServiceUnavailable {
+			if retry >= maxretry {
+				return false, err
+			}
+			retry++
+			continue
+		} else if err != nil {
+			return false, err
+		}
+
+		if response.StatusCode != 200 {
+			return false, nil
+		}
+		break
 	}
 
 	defer response.Body.Close()

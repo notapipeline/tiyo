@@ -9,12 +9,11 @@ package flow
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
+	"github.com/gin-gonic/gin"
 	"github.com/notapipeline/tiyo/config"
 	"github.com/notapipeline/tiyo/server"
-	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -47,43 +46,35 @@ func NewAPI() *API {
 func (api *API) Serve(config *config.Config) {
 	log.Info("starting flow server - ", config.FlowServer())
 	api.config = config
-	mode := os.Getenv("TIYO_LOG")
-	if mode == "" {
-		mode = "production"
-	}
-	log.Info("Running in ", mode, " mode")
-	if mode != "debug" && mode != "trace" {
-		gin.SetMode(gin.ReleaseMode)
-	}
 
-	var err error
-	server := gin.Default()
-
+	server := server.NewServer()
 	// Used by syphon to regiser a container as ready/busy
-	server.POST("/api/v1/register", api.Register)
+	server.Engine.POST("/api/v1/register", api.Register)
 
 	// Execute the pipeline and build infrastructure
-	server.POST("/api/v1/execute", api.Execute)
+	server.Engine.POST("/api/v1/execute", api.Execute)
 
 	// Get the status
-	server.POST("/api/v1/status", api.Status)
+	server.Engine.POST("/api/v1/status", api.Status)
 
 	// Start the queue
-	server.POST("/api/v1/start", api.Start)
+	server.Engine.POST("/api/v1/start", api.Start)
 
 	// Stop the queue
-	server.POST("/api/v1/stop", api.Stop)
+	server.Engine.POST("/api/v1/stop", api.Stop)
 
 	// destroy all infrastructure related to the pipeline
-	server.POST("/api/v1/destroy", api.Destroy)
+	server.Engine.POST("/api/v1/destroy", api.Destroy)
 
 	host := fmt.Sprintf("%s:%d", config.Flow.Host, config.Flow.Port)
 	log.Info(host)
+
+	var err error
 	if config.Flow.Cacert != "" && config.Flow.Cakey != "" {
-		err = server.RunTLS(
+		err = server.Engine.RunTLS(
 			host, config.Flow.Cacert, config.Flow.Cakey)
 	} else {
-		err = server.Run(host)
+		err = server.Engine.Run(host)
 	}
 
 	if err != nil {
@@ -218,7 +209,7 @@ func (api *API) pipelineFromContext(c *gin.Context, rebind bool) *Flow {
 	}
 
 	if rebind {
-		log.Info("Rebinding pipeline ", pipelineName)
+		log.Debug("Rebinding pipeline ", pipelineName)
 		flow.LoadPipeline(pipelineName)
 	}
 

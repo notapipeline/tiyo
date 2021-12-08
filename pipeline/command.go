@@ -298,13 +298,51 @@ func (command *Command) writeScript() (string, error) {
 	if command.Language == "dockerfile" {
 		return "", nil
 	}
-	var name string = command.GenerateRandomString()
-	name = fmt.Sprintf("/tmp/%s-%s", command.Name, name)
 	var (
-		content string
-		script  []byte
-		err     error
+		name      string = command.GenerateRandomString()
+		dirname   string = "/tiyo/workspace"
+		extension string = ""
+		content   string
+		script    []byte
+		err       error
 	)
+
+	if fi, err := os.Stat(dirname); err != nil || !fi.IsDir() {
+		if !os.IsNotExist(err) && !fi.IsDir() {
+			return "", err
+		}
+	}
+
+	if err := os.Mkdir(dirname, 0775); err != nil && !os.IsExist(err) {
+		return "", err
+	}
+
+	// golang caused this
+	switch command.Language {
+	case "r":
+		extension = "R"
+	case "javascript":
+		extension = "js"
+	case "python":
+		extension = "py"
+	case "groovy":
+		extension = "groovy"
+	case "perl":
+		extension = "pl"
+	case "sh":
+		fallthrough
+	case "bash":
+		extension = "sh"
+	case "golang":
+		extension = "go"
+	}
+
+	// not everything has an extension
+	name = fmt.Sprintf("%s/%s-%s", dirname, command.Name, name)
+	if extension != "" {
+		name = fmt.Sprintf("%s.%s", name, extension)
+	}
+
 	if script, err = base64.StdEncoding.DecodeString(command.ScriptContent); err != nil {
 		return "", err
 	}
@@ -312,7 +350,7 @@ func (command *Command) writeScript() (string, error) {
 
 	file, err := os.Create(name)
 	if err != nil {
-		return "", fmt.Errorf("Failed to create temporary file for %s. %s", name, err)
+		return "", fmt.Errorf("Failed to create script file for %s. %s", name, err)
 	}
 	defer file.Close()
 	if _, err := file.WriteString(content); err != nil {
@@ -342,16 +380,6 @@ func (command *Command) Execute(directory string, subdir string, filename string
 		err  error
 	)
 	command.ProcessArgs = make([]string, 0)
-	if command.ScriptContent != "" {
-		name, err = command.writeScript()
-		if err != nil {
-			log.Error(err)
-			return 1
-		}
-	}
-	if name != "" {
-		command.ProcessArgs = append(command.ProcessArgs, name)
-	}
 
 	// For certain commands, there needs to be an element of control over
 	// how files are separated
@@ -374,6 +402,10 @@ func (command *Command) Execute(directory string, subdir string, filename string
 			continue
 		}
 
+		// Never remove these - they are critical in RNA processing
+		// and in some instances, applications will literally fail
+		// to parse files in a meaningful manner
+
 		// Switch all other tiyo file separator flags
 		switch item {
 		// comma separated index
@@ -390,6 +422,20 @@ func (command *Command) Execute(directory string, subdir string, filename string
 		}
 	}
 
+	if command.ScriptContent != "" {
+		name, err = command.writeScript()
+		if err != nil {
+			log.Error(err)
+			return 1
+		}
+	}
+	if name != "" {
+		log.Info("Setting working directory to", filepath.Dir(name))
+		os.Chdir(filepath.Dir(name))
+		name = filepath.Base(name)
+		command.ProcessArgs = append(command.ProcessArgs, name)
+	}
+
 	info, _ := os.Stat(directory)
 	if info != nil {
 		var filedir string = command.collectFiles(directory, filename)
@@ -397,6 +443,8 @@ func (command *Command) Execute(directory string, subdir string, filename string
 		if _, err := os.Stat(directory); err != nil {
 			_ = os.Mkdir(directory, 0755)
 		}
+		// this may be problematic for go apps as go run does
+		// not work with absolute paths.
 		log.Info("Setting working directory to ", directory)
 		os.Chdir(directory)
 	}
@@ -519,14 +567,15 @@ func (command *Command) ExecuteWithTimeout(cmd *exec.Cmd, done chan error) int {
 		log.Error("Command ", command.Name, " exited due to timeout - ", command.Timeout, " seconds exceeded")
 		break
 	}
-	command.recreateTmp()
+	command.recreateWorkspace()
 	return exitCode
 }
 
-// recreateTmp : Deletes and recreates the temporary directory inside the container
-func (command *Command) recreateTmp() {
-	err := os.RemoveAll("/tmp")
+// recreateWorkspace : Deletes and recreates the workspace directory inside the container
+func (command *Command) recreateWorkspace() {
+	os.Chdir("/tiyo")
+	err := os.RemoveAll("workspace")
 	if err == nil {
-		os.Mkdir("/tmp", 0775)
+		os.Mkdir("workspace", 0775)
 	}
 }

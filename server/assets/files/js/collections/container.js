@@ -113,7 +113,7 @@ class Container {
             view.model.attributes.command = view.model.attr()['.label'].text
         }
 
-        $('#appauto').prop('checked', view.model.attributes.autostart);
+        $('#appautostart').prop('checked', view.model.attributes.autostart);
         $('#appcmd').val(view.model.attributes.command);
         $('#appargs').val(view.model.attributes.arguments);
         $('#appversion').val(view.model.attributes.version);
@@ -139,7 +139,7 @@ class Container {
             }
 
             view.model.attr()['.label'].text = $('#appname').val();
-            view.model.attributes.autostart = $('#appauto').prop('checked');
+            view.model.attributes.autostart = $('#appautostart').prop('checked');
             view.model.attributes.name = $('#appname').val();
             view.model.attributes.command = $('#appcmd').val();
             view.model.attributes.arguments = $('#appargs').val();

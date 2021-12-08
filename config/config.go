@@ -23,6 +23,8 @@ import (
 // TIMEOUT : Default timeout for http requests
 const TIMEOUT = 5 * time.Second
 
+var Designate string = ""
+
 // Host : Define how a host should be configured
 //
 // A host is one of `assemble` or `flow` and will contain
@@ -219,7 +221,8 @@ func NewConfig() (*Config, error) {
 			config.Kubernetes.ConfigFile = kubeconfig
 		}
 
-		if _, err = os.Stat(config.Kubernetes.ConfigFile); os.IsNotExist(err) {
+		// don't panic if we're syphon, we don't need kubeconfig
+		if _, err = os.Stat(config.Kubernetes.ConfigFile); os.IsNotExist(err) && Designate != "syphon" {
 			return nil, err
 		}
 	}

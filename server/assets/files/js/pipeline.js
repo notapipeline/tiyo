@@ -801,6 +801,10 @@ class Pipeline {
         }).show();
     }
 
+    showCredentials() {
+        // Not implemented
+    }
+
     /**
      * Cancel environment editing
      */
@@ -822,12 +826,20 @@ class Pipeline {
         this.destroyEditor();
     }
 
+    cancelCredentials() {
+        // not implemented
+    }
+
     /**
      * Save script as base64 encoded data into the current element model
      */
     saveEnvironment() {
         this.appelement.attributes.environment = this.editor.getValue().split("\n");
         this.destroyEditor();
+    }
+
+    saveCredentials() {
+        // not implemented
     }
 
     /**

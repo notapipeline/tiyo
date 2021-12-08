@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 
 	"github.com/gin-contrib/multitemplate"
 	"github.com/gin-contrib/static"
@@ -53,27 +54,43 @@ func NewServer() *Server {
 	if mode == "" {
 		mode = "production"
 	}
+	gin.DisableConsoleColor()
+	// create log directory if it does not exist
+	var dirname string = "/var/log/tiyo"
+	if fi, err := os.Stat(dirname); err != nil || !fi.IsDir() {
+		if !os.IsNotExist(err) && !fi.IsDir() {
+			return nil
+		}
+	}
+
+	if err := os.Mkdir(dirname, os.ModePerm); err != nil && !os.IsExist(err) {
+		return nil
+	}
+
 	log.Info("Running in ", mode, " mode")
 	if mode != "debug" && mode != "trace" {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
-	var err error
-	server.Engine = gin.Default()
-	if server.Config, err = config.NewConfig(); err != nil {
-		log.Error("Failed to load config ", err)
-		return nil
-	}
-	server.Init()
+	logfile := filepath.Join(dirname, fmt.Sprintf("%s.log", config.Designate))
+	server.Engine = gin.New()
+	server.Engine.Use(Logger(logfile, mode), gin.Recovery())
+
 	return &server
 }
 
 // Init : initialises the server environment
 func (server *Server) Init() {
+	var err error
+	if server.Config, err = config.NewConfig(); err != nil {
+		log.Error("Failed to load config ", err)
+		return
+	}
+
 	// Try to load from config file first
 	server.Dbname = server.Config.Dbname
 	server.Address = server.Config.Assemble.Host
-	server.Port = string(server.Config.Assemble.Port)
+	server.Port = fmt.Sprintf("%d", server.Config.Assemble.Port)
 
 	// Read the static path from the environment if set.
 	server.Dbname = os.Getenv("TIYO_DB_NAME")

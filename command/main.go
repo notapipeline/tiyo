@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/notapipeline/tiyo/config"
 	"github.com/notapipeline/tiyo/fill"
 	"github.com/notapipeline/tiyo/flow"
 	"github.com/notapipeline/tiyo/server"
@@ -80,7 +81,11 @@ func Usage() {
 // Run : Main entry for the primary wrapper
 func Run(args []string) int {
 	SetupLog()
-	var command string = "help"
+	var (
+		command  string = "help"
+		instance Command
+		code     int = 1
+	)
 	if len(args) != 0 {
 		for _, c := range acceptedCommands {
 			if c == args[0] {
@@ -96,7 +101,7 @@ func Run(args []string) int {
 		return 1
 	}
 
-	var instance Command
+	config.Designate = command
 	switch command {
 	case "help":
 		Usage()
@@ -116,7 +121,9 @@ func Run(args []string) int {
 		break
 	}
 
-	instance.Init()
-	code := instance.Run()
+	if instance != nil {
+		instance.Init()
+		code = instance.Run()
+	}
 	return code
 }
