@@ -13,6 +13,7 @@ import (
 
 	assetfs "github.com/elazarl/go-bindata-assetfs"
 	"github.com/gin-gonic/gin"
+	"github.com/notapipeline/tiyo/pkg/server/api"
 )
 
 // BinFileSystem : Binary file system for serving compiled assets
@@ -53,7 +54,7 @@ func GetBinFileSystem(root string) *BinFileSystem {
 // Collection : Load a collection of files from the filsystem and send them
 // back over the assigned gin.Context
 func (binFS *BinFileSystem) Collection(c *gin.Context) {
-	result := Result{}
+	result := api.Result{}
 	result.Code = 200
 	result.Result = "OK"
 	var err error

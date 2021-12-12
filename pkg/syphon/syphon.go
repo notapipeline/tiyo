@@ -33,7 +33,7 @@ import (
 
 	"github.com/notapipeline/tiyo/pkg/config"
 	"github.com/notapipeline/tiyo/pkg/pipeline"
-	"github.com/notapipeline/tiyo/pkg/server"
+	"github.com/notapipeline/tiyo/pkg/server/api"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -77,7 +77,7 @@ func NewSyphon() *Syphon {
 //
 // If status is 'ready', a command will be returned when
 // one is available. Otherwise, nil is returned
-func (syphon *Syphon) register(status string) *server.QueueItem {
+func (syphon *Syphon) register(status string) *api.QueueItem {
 	content := make(map[string]string)
 	content["pod"] = syphon.hostname
 	content["container"] = syphon.config.AppName
@@ -133,8 +133,8 @@ func (syphon *Syphon) register(status string) *server.QueueItem {
 		return nil
 	}
 
-	command := server.QueueItem{}
-	result := server.Result{
+	command := api.QueueItem{}
+	result := api.Result{
 		Message: &command,
 	}
 	err = json.Unmarshal(body, &result)
@@ -146,13 +146,13 @@ func (syphon *Syphon) register(status string) *server.QueueItem {
 }
 
 // requeue : push a failed task back to the queue
-func (syphon *Syphon) requeue(queueItem *server.QueueItem) {}
+func (syphon *Syphon) requeue(queueItem *api.QueueItem) {}
 
 // log : push logs back to the flow server
 func (syphon *Syphon) log(code int, command *pipeline.Command) {}
 
 // execute : trigger the queued command
-func (syphon *Syphon) execute(queueItem *server.QueueItem) {
+func (syphon *Syphon) execute(queueItem *api.QueueItem) {
 	command := &queueItem.Command
 	command.AddEnvVar("BASE_DIR", syphon.config.SequenceBaseDir)
 	command.AddEnvVar("PIPELINE_DIR", queueItem.PipelineFolder)

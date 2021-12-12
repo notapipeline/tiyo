@@ -41,11 +41,20 @@ map $http_upgrade $connection_upgrade {
     ''      close;
 }
 
-upstream {{.Nginx.Upstream.Name}} {
-{{- range $option := .Nginx.Upstream.Options}}
+upstream {{.Nginx.UpstreamPlain.Name}} {
+{{- range $option := .Nginx.UpstreamPlain.Options}}
     {{$option}}
 {{end -}}
-{{- range $srv := .Nginx.Upstream.Addresses}}
+{{- range $srv := .Nginx.UpstreamPlain.Addresses}}
+    server {{$srv}};
+{{- end}}
+}
+
+upstream {{.Nginx.UpstreamSecure.Name}} {
+{{- range $option := .Nginx.UpstreamSecure.Options}}
+    {{$option}}
+{{end -}}
+{{- range $srv := .Nginx.UpstreamSecure.Addresses}}
     server {{$srv}};
 {{- end}}
 }
@@ -65,7 +74,15 @@ server {
 {{end}}
 {{- range $location := $listener.Locations}}
     location {{$location.Path}} {
+
+{{- if $location.SecureUpstream }}
+        proxy_pass  https://{{$location.UpstreamSecure}};
+{{- else }}
         proxy_pass  http://{{$location.Upstream}};
+{{- end }}
+{{- if $location.SkipVerify }}
+        proxy_ssl_verify off;
+{{- end }}
         proxy_set_header  Host $host;
         proxy_set_header  X-Real-IP $remote_addr;
         proxy_set_header  X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -75,7 +92,7 @@ server {
         proxy_set_header  Connection 'upgrade';
     }
 {{- end}}
-{{- if $listener.Return}}
+{{- if $listener.Return }}
     return {{$listener.Return.Code}} {{$listener.Return.Address}};
 {{end}}
 }

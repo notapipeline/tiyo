@@ -17,7 +17,7 @@ import (
 
 	"github.com/notapipeline/tiyo/pkg/config"
 	"github.com/notapipeline/tiyo/pkg/pipeline"
-	"github.com/notapipeline/tiyo/pkg/server"
+	serverApi "github.com/notapipeline/tiyo/pkg/server/api"
 	log "github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -291,7 +291,7 @@ func (kube *Kubernetes) getStateFromDb(podname string, image string) string {
 			log.Error(err)
 			return state
 		}
-		contents := server.Result{}
+		contents := serverApi.Result{}
 		err = json.Unmarshal(body, &contents)
 		if err != nil {
 			log.Error(err)
@@ -505,6 +505,8 @@ func (kube *Kubernetes) CreateDaemonSet(pipeline string, container *pipeline.Con
 	var name string = pipeline + "-" + container.Name
 	client := kube.ClientSet.AppsV1().DaemonSets(kube.Config.Kubernetes.Namespace)
 
+	instances := container.GetChildren()
+
 	// If the daemonset exists, delete and recreate it.
 	if kube.DaemonSetExists(name) {
 		container.State = "Terminating"
@@ -532,7 +534,7 @@ func (kube *Kubernetes) CreateDaemonSet(pipeline string, container *pipeline.Con
 					},
 				},
 				Spec: corev1.PodSpec{
-					Containers: kube.GetStatefulSetContainers(container.GetChildren()),
+					Containers: kube.GetStatefulSetContainers(instances),
 					Volumes: []corev1.Volume{
 						{
 							Name: kube.Config.Kubernetes.Volume,
@@ -555,6 +557,7 @@ func (kube *Kubernetes) CreateDaemonSet(pipeline string, container *pipeline.Con
 
 	container.State = "Creating"
 	log.Info("Created daemon set ", result.GetObjectMeta().GetName())
+	kube.CreateService(name, instances)
 }
 
 // DEPLOYMENT METHODS
@@ -663,6 +666,7 @@ func (kube *Kubernetes) CreateDeployment(pipeline string, container *pipeline.Co
 	}
 	container.State = "Creating"
 	log.Info("Created deployment ", result.GetObjectMeta().GetName())
+	kube.CreateService(name, instances)
 }
 
 // MISC METHODS
@@ -712,8 +716,10 @@ func (kube *Kubernetes) GetServicePorts(instances []*pipeline.Command) []corev1.
 			port.TargetPort = intstr.FromInt(instance.ExposePort)
 			log.Debug("Found target port ", port.TargetPort)
 			port.Protocol = corev1.ProtocolTCP
+			port.Name = fmt.Sprintf("tcp-%d", port.Port)
 			if instance.IsUDP {
 				port.Protocol = corev1.ProtocolUDP
+				port.Name = fmt.Sprintf("udp-%d", port.Port)
 			}
 			ports = append(ports, port)
 		}
@@ -727,6 +733,7 @@ func (kube *Kubernetes) GetServicePorts(instances []*pipeline.Command) []corev1.
 					port.Port = int32((*link).(*pipeline.PortLink).DestPort)
 					port.TargetPort = intstr.FromInt((*link).(*pipeline.PortLink).DestPort)
 					port.Protocol = corev1.ProtocolTCP
+					port.Name = fmt.Sprintf("%s-%d", (*link).GetType(), port.Port)
 					if (*link).GetType() == "udp" {
 						port.Protocol = corev1.ProtocolUDP
 					}
@@ -771,6 +778,7 @@ func (kube *Kubernetes) CreateService(name string, instances []*pipeline.Command
 	}
 	result, err := client.Create(context.TODO(), service, metav1.CreateOptions{})
 	if err != nil {
+		log.Errorf("Failed to create service : %+v", err)
 		// service probably already exists
 		// TODO, enhance error check/destroy/recreate
 		return name
@@ -823,6 +831,11 @@ type ServicePort struct {
 
 	// The service node port
 	Port int32
+
+	// IsHttp port
+	HttpPort bool
+
+	Protocol corev1.Protocol
 }
 
 func (kube *Kubernetes) ServiceNodePorts(name string) *[]ServicePort {
@@ -846,6 +859,8 @@ func (kube *Kubernetes) ServiceNodePorts(name string) *[]ServicePort {
 				servicePort := ServicePort{}
 				servicePort.Address = addr
 				servicePort.Port = port.NodePort
+				servicePort.Protocol = port.Protocol
+				servicePort.HttpPort = port.TargetPort.IntVal == 80
 				log.Debug("Adding port ", servicePort.Port)
 				servicePorts = append(servicePorts, servicePort)
 			}
@@ -864,7 +879,7 @@ func (kube *Kubernetes) IngressRules(serviceName string, instances []*pipeline.C
 		pathType := networkv1.PathTypePrefix
 		if instance.ExposePort > 0 {
 			path := networkv1.HTTPIngressPath{
-				Path:     "/" + instance.Name,
+				Path:     "/",
 				PathType: &pathType,
 				Backend: networkv1.IngressBackend{
 					Service: &networkv1.IngressServiceBackend{
@@ -901,7 +916,7 @@ func (kube *Kubernetes) IngressRules(serviceName string, instances []*pipeline.C
 						continue
 					}
 					path := networkv1.HTTPIngressPath{
-						Path:     "/" + instance.Name + "/" + string(port),
+						Path:     "/",
 						PathType: &pathType,
 						Backend: networkv1.IngressBackend{
 							Service: &networkv1.IngressServiceBackend{
@@ -925,7 +940,7 @@ func (kube *Kubernetes) IngressRules(serviceName string, instances []*pipeline.C
 	}
 
 	rule := networkv1.IngressRule{
-		Host: kube.Pipeline.Fqdn,
+		Host: fmt.Sprintf("%s.%s", serviceName, kube.Config.DNSName),
 		IngressRuleValue: networkv1.IngressRuleValue{
 			HTTP: &networkv1.HTTPIngressRuleValue{
 				Paths: paths,
@@ -939,7 +954,7 @@ func (kube *Kubernetes) IngressRules(serviceName string, instances []*pipeline.C
 		log.Debug("Firing Create nginx config with ", rules, servicePorts)
 		container := kube.Pipeline.ContainerFromServiceName(serviceName)
 		if container != nil {
-			CreateNginxConfig(kube.Config, container.Name, rules, servicePorts)
+			CreateNginxConfig(kube.Config, serviceName, rules, servicePorts)
 		}
 	}
 
@@ -972,7 +987,7 @@ func (kube *Kubernetes) CreateIngress(ingressName string, instances []*pipeline.
 }
 
 func (kube *Kubernetes) DestroyIngress(name string) {
-	client := kube.ClientSet.NetworkingV1beta1().Ingresses(kube.Config.Kubernetes.Namespace)
+	client := kube.ClientSet.NetworkingV1().Ingresses(kube.Config.Kubernetes.Namespace)
 	policy := metav1.DeletePropagationForeground
 	client.Delete(context.TODO(), name, metav1.DeleteOptions{
 		PropagationPolicy: &policy,
@@ -989,7 +1004,7 @@ func (kube *Kubernetes) DestroyIngress(name string) {
 }
 
 func (kube *Kubernetes) IngressExists(name string) bool {
-	list, err := kube.ClientSet.NetworkingV1beta1().Ingresses(kube.Config.Kubernetes.Namespace).List(
+	list, err := kube.ClientSet.NetworkingV1().Ingresses(kube.Config.Kubernetes.Namespace).List(
 		context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		log.Error(err)

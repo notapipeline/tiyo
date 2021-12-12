@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/notapipeline/tiyo/pkg/config"
 	"github.com/notapipeline/tiyo/pkg/server"
+	serverApi "github.com/notapipeline/tiyo/pkg/server/api"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -96,7 +97,7 @@ func (api *API) Register(c *gin.Context) {
 	}
 
 	if flow = api.flowFromPodName(request["pod"].(string)); flow == nil || flow.Queue == nil {
-		result := server.Result{
+		result := serverApi.Result{
 			Code:    404,
 			Result:  "Error",
 			Message: "Not found - try again later",
@@ -105,7 +106,7 @@ func (api *API) Register(c *gin.Context) {
 		return
 	}
 	log.Debug("Flow queue = ", flow.Queue)
-	var result *server.Result = flow.Queue.Register(request)
+	var result *serverApi.Result = flow.Queue.Register(request)
 	c.JSON(result.Code, result)
 }
 
@@ -119,7 +120,7 @@ func (api *API) podRequest(c *gin.Context) map[string]interface{} {
 		}
 	}
 	if ok, missing := api.checkFields(expected, request); !ok {
-		result := server.NewResult()
+		result := serverApi.NewResult()
 		result.Code = 400
 		result.Result = "Error"
 		result.Message = "The following fields are mising from the request " + strings.Join(missing, ", ")
@@ -161,7 +162,7 @@ func (api *API) checkFields(expected []string, request map[string]interface{}) (
 
 // pipelineFromContext : Get the Pipeline instance from the current Gin context
 func (api *API) pipelineFromContext(c *gin.Context, rebind bool) *Flow {
-	result := server.Result{
+	result := serverApi.Result{
 		Code:   400,
 		Result: "Error",
 	}
@@ -195,7 +196,7 @@ func (api *API) pipelineFromContext(c *gin.Context, rebind bool) *Flow {
 
 		if !newFlow.Setup(pipelineName) {
 			log.Error("Failed to configure flow for pipeline ", pipelineName)
-			result := server.Result{
+			result := serverApi.Result{
 				Code:    500,
 				Result:  "Error",
 				Message: "Internal server error",
@@ -229,7 +230,7 @@ func (api *API) Destroy(c *gin.Context) {
 	}
 	log.Warn("Triggering flow.Destroy()")
 	go flow.Destroy()
-	result := server.Result{
+	result := serverApi.Result{
 		Code:    202,
 		Result:  "Accepted",
 		Message: "",
@@ -248,7 +249,7 @@ func (api *API) Stop(c *gin.Context) {
 	if flow.IsExecuting {
 		flow.Stop()
 	}
-	result := server.Result{
+	result := serverApi.Result{
 		Code:    202,
 		Result:  "Accepted",
 		Message: "",
@@ -267,7 +268,7 @@ func (api *API) Start(c *gin.Context) {
 	if !flow.IsExecuting {
 		flow.Start()
 	}
-	result := server.Result{
+	result := serverApi.Result{
 		Code:    202,
 		Result:  "Accepted",
 		Message: "",
@@ -353,7 +354,7 @@ func (api *API) checkStatus(c *gin.Context, rebind bool) {
 		response["status"] = "Creating"
 	}
 
-	result := server.Result{
+	result := serverApi.Result{
 		Code:    200,
 		Result:  "OK",
 		Message: response,

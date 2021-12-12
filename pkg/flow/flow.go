@@ -35,7 +35,7 @@ import (
 
 	"github.com/notapipeline/tiyo/pkg/config"
 	"github.com/notapipeline/tiyo/pkg/pipeline"
-	"github.com/notapipeline/tiyo/pkg/server"
+	"github.com/notapipeline/tiyo/pkg/server/api"
 )
 
 // Flow : Main structure of the Flow subsystem
@@ -447,8 +447,6 @@ func (flow *Flow) triggerServices() {
 			}
 
 			log.Info("Triggering service command for ", instance.Name)
-			// example:
-			// rna-star-tiyo:2.7.7a:sorting:root:GL53_003_Plate3_c1_Gfi1_HE_S3 - command.ID
 			var commandKey string = instance.GetContainer(true) + ":" + container.Name
 			var contents map[string]string = map[string]string{
 				"bucket": "queue",
@@ -530,7 +528,7 @@ func (flow *Flow) Decrypt(what string) (string, error) {
 		return message, err
 	}
 
-	result := server.Result{}
+	result := api.Result{}
 	err = json.Unmarshal(body, &result)
 	if err != nil {
 		return message, err

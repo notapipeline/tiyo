@@ -17,8 +17,8 @@ import (
 
 	"github.com/notapipeline/tiyo/pkg/config"
 	"github.com/notapipeline/tiyo/pkg/pipeline"
+	"github.com/notapipeline/tiyo/pkg/server/api"
 
-	"github.com/notapipeline/tiyo/pkg/server"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -82,15 +82,17 @@ func NewQueue(config *config.Config, pipeline *pipeline.Pipeline, bucket string)
 // queue management is here.
 
 // Register : Registers a container into the queue executors
-func (queue *Queue) Register(request map[string]interface{}) *server.Result {
+func (queue *Queue) Register(request map[string]interface{}) *api.Result {
 	var key string = request["container"].(string) + ":" + request["pod"].(string)
-	log.Debug(queue.PodBucket)
+	log.Infof("Recieved registration request from %s", key)
+	log.Debugf("Registration request body: %+v", request)
+
 	data := queue.jsonBody(queue.PodBucket, key, request["status"].(string))
 	result := queue.put(data)
 	if request["status"] == "Ready" {
 		var (
 			code    int
-			message *server.QueueItem = nil
+			message *api.QueueItem = nil
 		)
 		if !queue.Stopped {
 			code, message = queue.GetQueueItem(request["container"].(string), request["pod"].(string))
@@ -116,10 +118,11 @@ func (queue *Queue) Start() {
 }
 
 // GetQueueItem : Get a command to execute
-func (queue *Queue) GetQueueItem(container string, pod string) (int, *server.QueueItem) {
+func (queue *Queue) GetQueueItem(container string, pod string) (int, *api.QueueItem) {
 	serverAddress := queue.Config.AssembleServer()
 
 	var key string = container + ":" + pod
+	log.Infof("Retrieving queue item for %s", key)
 	req, err := http.NewRequest(http.MethodGet,
 		serverAddress+"/api/v1/popqueue/"+queue.Pipeline.Name+"/"+key, nil)
 	if err != nil {
@@ -128,7 +131,7 @@ func (queue *Queue) GetQueueItem(container string, pod string) (int, *server.Que
 	req.Header.Set("Accept", "application/json")
 	code, body := queue.makeRequest(req)
 
-	item := server.QueueItem{}
+	item := api.QueueItem{}
 	err = json.Unmarshal(body, &item)
 	if err != nil {
 		log.Error(err)
@@ -148,8 +151,8 @@ func (queue *Queue) GetQueueItem(container string, pod string) (int, *server.Que
 }
 
 // put : Put data into the bolt store
-func (queue *Queue) put(request []byte) *server.Result {
-	result := server.NewResult()
+func (queue *Queue) put(request []byte) *api.Result {
+	result := api.NewResult()
 	result.Code = 204
 	result.Result = "No content"
 	result.Message = ""

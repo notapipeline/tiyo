@@ -18,6 +18,7 @@ import (
 	"github.com/gin-contrib/static"
 	"github.com/gin-gonic/gin"
 	"github.com/notapipeline/tiyo/pkg/config"
+	"github.com/notapipeline/tiyo/pkg/server/api"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -38,7 +39,7 @@ type Server struct {
 	Engine *gin.Engine
 
 	// The API handling requests
-	API *API
+	API *api.API
 
 	// Flag set for initialising the assemble server component
 	Flags *flag.FlagSet
@@ -124,7 +125,7 @@ func (server *Server) Run() int {
 		db  string = server.Config.DbDir + "/" + server.Dbname
 	)
 
-	server.API, err = NewAPI(db, server.Config)
+	server.API, err = api.NewAPI(db, server.Config)
 	if err != nil {
 		fmt.Println(err)
 		return 1
@@ -143,11 +144,11 @@ func (server *Server) Run() int {
 	})
 
 	// page methods
-	server.Engine.GET("/", server.API.Index)
-	server.Engine.GET("/pipeline", server.API.Index)
-	server.Engine.GET("/scan", server.API.Index)
-	server.Engine.GET("/scan/:bucket", server.API.Index)
-	server.Engine.GET("/buckets", server.API.Index)
+	server.Engine.GET("/", server.Index)
+	server.Engine.GET("/pipeline", server.Index)
+	server.Engine.GET("/scan", server.Index)
+	server.Engine.GET("/scan/:bucket", server.Index)
+	server.Engine.GET("/buckets", server.Index)
 
 	// api methods
 	server.Engine.GET("/api/v1/bucket", server.API.Buckets)
@@ -195,4 +196,14 @@ func (server *Server) Run() int {
 		return 1
 	}
 	return 0
+}
+
+// Index : Render the index page back on the GIN context
+//
+// TODO : Make this a little more versatile and use SSR to render
+//        more of the page than relying on JS and a one page website
+func (server *Server) Index(c *gin.Context) {
+	c.HTML(200, "index", gin.H{
+		"Title": "TIYO ASSEMBLE - Kubernetes cluster designer",
+	})
 }

@@ -63,6 +63,12 @@ type Location struct {
 
 	// The name of an upstream to proxy against
 	Upstream string
+
+	// Skip verification check on the backend
+	SkipVerify bool
+
+	// Use HTTPS for upstream connection
+	SecureUpstream bool
 }
 
 // Listener : An Nginx server endpoint to listen for requests on
@@ -90,8 +96,11 @@ type Listener struct {
 // Nginx : The structure of an NGINX server endpoint configuration
 type Nginx struct {
 
-	// The upstream to build
-	Upstream *Upstream
+	// The Plain HTTP upstream to build
+	UpstreamPlain *Upstream
+
+	// The secure HTTPS upstream to build
+	UpstreamSecure *Upstream
 
 	// A slice of listener objects to listen against - usually one describing 80 and one for 443
 	Listeners []*Listener
@@ -123,24 +132,35 @@ func CreateNginxConfig(config *config.Config, name string, rules []networkv1.Ing
 	var directory string = "/etc/nginx/sites.d/"
 
 	for _, rule := range rules {
-		ups := Upstream{}
-		ups.Name = name
-		ups.Options = []string{"least_conn;"}
-		addresses := make([]string, 0)
+		upsPlain := Upstream{}
+		upsSecure := Upstream{}
+		upsPlain.Name = name
+		upsSecure.Name = fmt.Sprintf("%ssecure", name)
+		upsPlain.Options = []string{"least_conn;"}
+		upsSecure.Options = []string{"least_conn;"}
+		addressesPlain := make([]string, 0)
+		addressesSecure := make([]string, 0)
 
 		nginx := Nginx{
-			Upstream: &ups,
+			UpstreamPlain:  &upsPlain,
+			UpstreamSecure: &upsSecure,
 		}
 		nginx.Listeners = make([]*Listener, 0)
 
 		for _, addr := range *upstream {
-			log.Debug(fmt.Sprintf("Found service port %+v", addr))
-			addresses = append(addresses, fmt.Sprintf("%s:%d", addr.Address, addr.Port))
+			if addr.HttpPort {
+				log.Debug(fmt.Sprintf("Found plain http service port %+v", addr))
+				addressesPlain = append(addressesPlain, fmt.Sprintf("%s:%d", addr.Address, addr.Port))
+			} else {
+				log.Debug(fmt.Sprintf("Found secure https service port %+v", addr))
+				addressesSecure = append(addressesSecure, fmt.Sprintf("%s:%d", addr.Address, addr.Port))
+			}
 		}
 
-		ups.Addresses = addresses
+		upsPlain.Addresses = addressesPlain
+		upsSecure.Addresses = addressesSecure
 
-		var hostname = ups.Name + "." + rule.Host
+		var hostname = name + "." + config.DNSName
 
 		CreateSSLCertificates(hostname)
 
@@ -169,14 +189,19 @@ func CreateNginxConfig(config *config.Config, name string, rules []networkv1.Ing
 			location := Location{
 				Path:     "/",
 				Upstream: name,
+
+				// TODO: These need to be configurable
+				SecureUpstream: false,
+				SkipVerify:     true,
 			}
 			https.Locations = append(http.Locations, &location)
 		}
 		nginx.Listeners = append(nginx.Listeners, &https)
 
 		log.Debug(fmt.Sprintf(
-			"Creating NGINX config file with upstream %+v and listener %+v",
-			nginx.Upstream,
+			"Creating NGINX config file with upstreams %+v and %+v, and listener %+v",
+			nginx.UpstreamPlain,
+			nginx.UpstreamSecure,
 			nginx.Listeners))
 
 		file, err := os.Create(filepath.Join(directory, name+".conf"))
