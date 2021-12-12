@@ -50,32 +50,32 @@ func (api *API) Serve(config *config.Config) {
 
 	server := server.NewServer()
 	// Used by syphon to regiser a container as ready/busy
-	server.Engine.POST("/api/v1/register", api.Register)
+	server.Engine().POST("/api/v1/register", api.Register)
 
 	// Execute the pipeline and build infrastructure
-	server.Engine.POST("/api/v1/execute", api.Execute)
+	server.Engine().POST("/api/v1/execute", api.Execute)
 
 	// Get the status
-	server.Engine.POST("/api/v1/status", api.Status)
+	server.Engine().POST("/api/v1/status", api.Status)
 
 	// Start the queue
-	server.Engine.POST("/api/v1/start", api.Start)
+	server.Engine().POST("/api/v1/start", api.Start)
 
 	// Stop the queue
-	server.Engine.POST("/api/v1/stop", api.Stop)
+	server.Engine().POST("/api/v1/stop", api.Stop)
 
 	// destroy all infrastructure related to the pipeline
-	server.Engine.POST("/api/v1/destroy", api.Destroy)
+	server.Engine().POST("/api/v1/destroy", api.Destroy)
 
 	host := fmt.Sprintf("%s:%d", config.Flow.Host, config.Flow.Port)
 	log.Info(host)
 
 	var err error
 	if config.Flow.Cacert != "" && config.Flow.Cakey != "" {
-		err = server.Engine.RunTLS(
+		err = server.Engine().RunTLS(
 			host, config.Flow.Cacert, config.Flow.Cakey)
 	} else {
-		err = server.Engine.Run(host)
+		err = server.Engine().Run(host)
 	}
 
 	if err != nil {

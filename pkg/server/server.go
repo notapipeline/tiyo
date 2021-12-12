@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-// Package server : A webserver base GUI and API for managing a server.APIDB
+// Package server : A webserver base GUI and API for managing a server.apiDB
 package server
 
 import (
@@ -36,10 +36,10 @@ type Server struct {
 	Address string
 
 	// The GIN HTTP Engine
-	Engine *gin.Engine
+	engine *gin.Engine
 
 	// The API handling requests
-	API *api.API
+	api *api.API
 
 	// Flag set for initialising the assemble server component
 	Flags *flag.FlagSet
@@ -74,8 +74,8 @@ func NewServer() *Server {
 	}
 
 	logfile := filepath.Join(dirname, fmt.Sprintf("%s.log", config.Designate))
-	server.Engine = gin.New()
-	server.Engine.Use(Logger(logfile, mode), gin.Recovery())
+	server.engine = gin.New()
+	server.engine.Use(Logger(logfile, mode), gin.Recovery())
 
 	return &server
 }
@@ -116,79 +116,83 @@ func (server *Server) Init() {
 	}
 }
 
+func (server *Server) Engine() *gin.Engine {
+	return server.engine
+}
+
 // Run : runs the server component when activated via main
 func (server *Server) Run() int {
-	log.Info("starting server.APIdb-browser..")
+	log.Info("starting server.apidb-browser..")
 
 	var (
 		err error
 		db  string = server.Config.DbDir + "/" + server.Dbname
 	)
 
-	server.API, err = api.NewAPI(db, server.Config)
+	server.api, err = api.NewAPI(db, server.Config)
 	if err != nil {
 		fmt.Println(err)
 		return 1
 	}
 	bfs := GetBinFileSystem("assets/files")
-	server.Engine.Use(static.Serve("/static", bfs))
+	server.engine.Use(static.Serve("/static", bfs))
 
 	render := multitemplate.New()
 	render.Add("index", LoadTemplates("index.tpl"))
-	server.Engine.HTMLRender = render
+	server.engine.HTMLRender = render
 
-	server.Engine.GET("/ping", func(c *gin.Context) {
+	server.engine.GET("/ping", func(c *gin.Context) {
 		c.JSON(200, gin.H{
 			"message": "pong",
 		})
 	})
 
 	// page methods
-	server.Engine.GET("/", server.Index)
-	server.Engine.GET("/pipeline", server.Index)
-	server.Engine.GET("/scan", server.Index)
-	server.Engine.GET("/scan/:bucket", server.Index)
-	server.Engine.GET("/buckets", server.Index)
+	server.engine.GET("/", server.Index)
+	server.engine.GET("/pipeline", server.Index)
+	server.engine.GET("/scan", server.Index)
+	server.engine.GET("/scan/:bucket", server.Index)
+	server.engine.GET("/buckets", server.Index)
 
 	// api methods
-	server.Engine.GET("/api/v1/bucket", server.API.Buckets)
-	server.Engine.GET("/api/v1/bucket/:bucket/:child", server.API.Get)
-	server.Engine.GET("/api/v1/bucket/:bucket/:child/*key", server.API.Get)
+	server.engine.GET("/api/v1/bucket", server.api.Buckets)
+	server.engine.GET("/api/v1/bucket/:bucket/:child", server.api.Get)
+	server.engine.GET("/api/v1/bucket/:bucket/:child/*key", server.api.Get)
 
-	server.Engine.PUT("/api/v1/bucket", server.API.Put)
-	server.Engine.POST("/api/v1/bucket", server.API.CreateBucket)
+	server.engine.PUT("/api/v1/bucket", server.api.Put)
+	server.engine.POST("/api/v1/bucket", server.api.CreateBucket)
 
-	server.Engine.DELETE("/api/v1/bucket/:bucket", server.API.DeleteBucket)
-	server.Engine.DELETE("/api/v1/bucket/:bucket/:child", server.API.DeleteKey)
-	server.Engine.DELETE("/api/v1/bucket/:bucket/:child/*key", server.API.DeleteKey)
+	server.engine.DELETE("/api/v1/bucket/:bucket", server.api.DeleteBucket)
+	server.engine.DELETE("/api/v1/bucket/:bucket/:child", server.api.DeleteKey)
+	server.engine.DELETE("/api/v1/bucket/:bucket/:child/*key", server.api.DeleteKey)
 
-	server.Engine.GET("/api/v1/containers", server.API.Containers)
-	server.Engine.GET("/api/v1/collections/:collection", bfs.Collection)
+	server.engine.GET("/api/v1/containers", server.api.Containers)
+	server.engine.GET("/api/v1/collections/:collection", bfs.Collection)
 
-	server.Engine.GET("/api/v1/scan/:bucket", server.API.PrefixScan)
-	server.Engine.GET("/api/v1/scan/:bucket/:child", server.API.PrefixScan)
-	server.Engine.GET("/api/v1/scan/:bucket/:child/*key", server.API.PrefixScan)
+	server.engine.GET("/api/v1/scan/:bucket", server.api.PrefixScan)
+	server.engine.GET("/api/v1/scan/:bucket/:child", server.api.PrefixScan)
+	server.engine.GET("/api/v1/scan/:bucket/:child/*key", server.api.PrefixScan)
 
-	server.Engine.GET("/api/v1/count/:bucket", server.API.KeyCount)
-	server.Engine.GET("/api/v1/count/:bucket/*child", server.API.KeyCount)
+	server.engine.GET("/api/v1/count/:bucket", server.api.KeyCount)
+	server.engine.GET("/api/v1/count/:bucket/*child", server.api.KeyCount)
 
-	server.Engine.GET("/api/v1/popqueue/:pipeline/:key", server.API.PopQueue)
-	server.Engine.POST("/api/v1/perpetualqueue", server.API.PerpetualQueue)
+	server.engine.GET("/api/v1/popqueue/:pipeline/:key", server.api.PopQueue)
+	server.engine.POST("/api/v1/perpetualqueue", server.api.PerpetualQueue)
 
-	server.Engine.GET("/api/v1/status/:pipeline", server.API.FlowStatus)
-	server.Engine.POST("/api/v1/execute", server.API.ExecuteFlow)
-	server.Engine.POST("/api/v1/startflow", server.API.StartFlow)
-	server.Engine.POST("/api/v1/stopflow", server.API.StopFlow)
-	server.Engine.POST("/api/v1/destroyflow", server.API.DestroyFlow)
-	server.Engine.POST("/api/v1/encrypt", server.API.Encrypt)
-	server.Engine.POST("/api/v1/decrypt", server.API.Decrypt)
+	server.engine.GET("/api/v1/status/:pipeline", server.api.FlowStatus)
+	server.engine.POST("/api/v1/execute", server.api.ExecuteFlow)
+	server.engine.POST("/api/v1/startflow", server.api.StartFlow)
+	server.engine.POST("/api/v1/stopflow", server.api.StopFlow)
+	server.engine.POST("/api/v1/destroyflow", server.api.DestroyFlow)
+	server.engine.POST("/api/v1/encrypt", server.api.Encrypt)
+	server.engine.POST("/api/v1/decrypt", server.api.Decrypt)
 
 	host := fmt.Sprintf("%s:%d", server.Config.Assemble.Host, server.Config.Assemble.Port)
 	log.Info(host)
 	if server.Config.Assemble.Cacert != "" && server.Config.Assemble.Cakey != "" {
-		err = server.Engine.RunTLS(host, server.Config.Assemble.Cacert, server.Config.Assemble.Cakey)
+		err = server.engine.RunTLS(host, server.Config.Assemble.Cacert, server.Config.Assemble.Cakey)
 	} else {
-		err = server.Engine.Run(host)
+		err = server.engine.Run(host)
 	}
 
 	if err != nil {

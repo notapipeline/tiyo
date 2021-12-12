@@ -15,7 +15,7 @@ import (
 func Logger(logfile string, notLogged ...string) gin.HandlerFunc {
 	var skip map[string]struct{}
 
-	src, err := os.OpenFile(logfile, os.O_APPEND|os.O_WRONLY, os.ModeAppend)
+	src, err := os.OpenFile(logfile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
 		fmt.Println("err", err)
 	}

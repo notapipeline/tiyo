@@ -318,6 +318,7 @@ func (command *Command) writeScript() (string, error) {
 	}
 
 	// golang caused this
+	// (but surely there's a better way)
 	switch command.Language {
 	case "r":
 		extension = "R"
@@ -335,6 +336,10 @@ func (command *Command) writeScript() (string, error) {
 		extension = "sh"
 	case "golang":
 		extension = "go"
+	case "ruby":
+		extension = "rb"
+	case "php":
+		extension = "php"
 	}
 
 	// not everything has an extension
