@@ -13,8 +13,11 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"time"
 
 	"github.com/gin-contrib/multitemplate"
+	"github.com/gin-contrib/sessions"
+	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-contrib/static"
 	"github.com/gin-gonic/gin"
 	"github.com/notapipeline/tiyo/pkg/config"
@@ -38,14 +41,20 @@ type Server struct {
 	// The GIN HTTP Engine
 	engine *gin.Engine
 
+	// Router for authenticated endpoints
+	router *gin.RouterGroup
+
+	// Cookie store for session data
+	securetoken cookie.Store
+
 	// The API handling requests
 	api *api.API
 
 	// Flag set for initialising the assemble server component
-	Flags *flag.FlagSet
+	flags *flag.FlagSet
 
 	// Primary configuration of the assemble server component
-	Config *config.Config
+	config *config.Config
 }
 
 // NewServer : Create a new Server instance
@@ -77,21 +86,24 @@ func NewServer() *Server {
 	server.engine = gin.New()
 	server.engine.Use(Logger(logfile, mode), gin.Recovery())
 
+	server.router = server.engine.Group("/")
+	server.router.Use(sessions.Sessions(config.SESSION_COOKIE_NAME, server.securetoken))
+
 	return &server
 }
 
 // Init : initialises the server environment
 func (server *Server) Init() {
 	var err error
-	if server.Config, err = config.NewConfig(); err != nil {
+	if server.config, err = config.NewConfig(); err != nil {
 		log.Error("Failed to load config ", err)
 		return
 	}
 
 	// Try to load from config file first
-	server.Dbname = server.Config.Dbname
-	server.Address = server.Config.Assemble.Host
-	server.Port = fmt.Sprintf("%d", server.Config.Assemble.Port)
+	server.Dbname = server.config.Dbname
+	server.Address = server.config.Assemble.Host
+	server.Port = fmt.Sprintf("%d", server.config.Assemble.Port)
 
 	// Read the static path from the environment if set.
 	server.Dbname = os.Getenv("TIYO_DB_NAME")
@@ -103,12 +115,12 @@ func (server *Server) Init() {
 		server.Port = "8180"
 	}
 
-	server.Flags = flag.NewFlagSet("serve", flag.ExitOnError)
+	server.flags = flag.NewFlagSet("serve", flag.ExitOnError)
 	// Setup for command line processing
-	server.Flags.StringVar(&server.Dbname, "d", server.Dbname, "Name of the database")
-	server.Flags.StringVar(&server.Port, "p", server.Port, "Port for the web-ui")
-	server.Flags.StringVar(&server.Address, "a", server.Address, "Listen address for the web-ui")
-	server.Flags.Parse(os.Args[2:])
+	server.flags.StringVar(&server.Dbname, "d", server.Dbname, "Name of the database")
+	server.flags.StringVar(&server.Port, "p", server.Port, "Port for the web-ui")
+	server.flags.StringVar(&server.Address, "a", server.Address, "Listen address for the web-ui")
+	server.flags.Parse(os.Args[2:])
 
 	// if dbname is not set by flag or environment, set it as the application basename
 	if server.Dbname == "" {
@@ -126,16 +138,18 @@ func (server *Server) Run() int {
 
 	var (
 		err error
-		db  string = server.Config.DbDir + "/" + server.Dbname
+		db  string = server.config.DbDir + "/" + server.Dbname
 	)
 
-	server.api, err = api.NewAPI(db, server.Config)
+	server.api, err = api.NewAPI(db, server.config)
 	if err != nil {
 		fmt.Println(err)
 		return 1
 	}
 	bfs := GetBinFileSystem("assets/files")
 	server.engine.Use(static.Serve("/static", bfs))
+
+	server.setupRoutes(bfs)
 
 	render := multitemplate.New()
 	render.Add("index", LoadTemplates("index.tpl"))
@@ -147,50 +161,10 @@ func (server *Server) Run() int {
 		})
 	})
 
-	// page methods
-	server.engine.GET("/", server.Index)
-	server.engine.GET("/pipeline", server.Index)
-	server.engine.GET("/scan", server.Index)
-	server.engine.GET("/scan/:bucket", server.Index)
-	server.engine.GET("/buckets", server.Index)
-
-	// api methods
-	server.engine.GET("/api/v1/bucket", server.api.Buckets)
-	server.engine.GET("/api/v1/bucket/:bucket/:child", server.api.Get)
-	server.engine.GET("/api/v1/bucket/:bucket/:child/*key", server.api.Get)
-
-	server.engine.PUT("/api/v1/bucket", server.api.Put)
-	server.engine.POST("/api/v1/bucket", server.api.CreateBucket)
-
-	server.engine.DELETE("/api/v1/bucket/:bucket", server.api.DeleteBucket)
-	server.engine.DELETE("/api/v1/bucket/:bucket/:child", server.api.DeleteKey)
-	server.engine.DELETE("/api/v1/bucket/:bucket/:child/*key", server.api.DeleteKey)
-
-	server.engine.GET("/api/v1/containers", server.api.Containers)
-	server.engine.GET("/api/v1/collections/:collection", bfs.Collection)
-
-	server.engine.GET("/api/v1/scan/:bucket", server.api.PrefixScan)
-	server.engine.GET("/api/v1/scan/:bucket/:child", server.api.PrefixScan)
-	server.engine.GET("/api/v1/scan/:bucket/:child/*key", server.api.PrefixScan)
-
-	server.engine.GET("/api/v1/count/:bucket", server.api.KeyCount)
-	server.engine.GET("/api/v1/count/:bucket/*child", server.api.KeyCount)
-
-	server.engine.GET("/api/v1/popqueue/:pipeline/:key", server.api.PopQueue)
-	server.engine.POST("/api/v1/perpetualqueue", server.api.PerpetualQueue)
-
-	server.engine.GET("/api/v1/status/:pipeline", server.api.FlowStatus)
-	server.engine.POST("/api/v1/execute", server.api.ExecuteFlow)
-	server.engine.POST("/api/v1/startflow", server.api.StartFlow)
-	server.engine.POST("/api/v1/stopflow", server.api.StopFlow)
-	server.engine.POST("/api/v1/destroyflow", server.api.DestroyFlow)
-	server.engine.POST("/api/v1/encrypt", server.api.Encrypt)
-	server.engine.POST("/api/v1/decrypt", server.api.Decrypt)
-
-	host := fmt.Sprintf("%s:%d", server.Config.Assemble.Host, server.Config.Assemble.Port)
+	host := fmt.Sprintf("%s:%d", server.config.Assemble.Host, server.config.Assemble.Port)
 	log.Info(host)
-	if server.Config.Assemble.Cacert != "" && server.Config.Assemble.Cakey != "" {
-		err = server.engine.RunTLS(host, server.Config.Assemble.Cacert, server.Config.Assemble.Cakey)
+	if server.config.Assemble.Cacert != "" && server.config.Assemble.Cakey != "" {
+		err = server.engine.RunTLS(host, server.config.Assemble.Cacert, server.config.Assemble.Cakey)
 	} else {
 		err = server.engine.Run(host)
 	}
@@ -210,4 +184,19 @@ func (server *Server) Index(c *gin.Context) {
 	c.HTML(200, "index", gin.H{
 		"Title": "TIYO ASSEMBLE - Kubernetes cluster designer",
 	})
+}
+
+// Display any errors back to the user
+func (server *Server) Error(c *gin.Context, code int, err error) {
+	log.Error(err)
+	c.HTML(code, "error", err.Error())
+}
+
+// If we hit a non-session page when we should be in session (e.g. signin)
+func (server *Server) shouldRedirect(c *gin.Context) bool {
+	if _, ok := c.Get(sessions.DefaultKey); ok {
+		session := sessions.Default(c)
+		return session.Get("NotAfter") != nil && time.Now().Before(session.Get("NotAfter").(time.Time))
+	}
+	return false
 }

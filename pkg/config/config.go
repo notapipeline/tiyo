@@ -21,7 +21,11 @@ import (
 )
 
 // TIMEOUT : Default timeout for http requests
-const TIMEOUT = 5 * time.Second
+const (
+	TIMEOUT             time.Duration = 5 * time.Second
+	SESSION_COOKIE_NAME string        = "__tiyo_session"
+	SSO_SESSION_NAME    string        = "__tiyo_sso_session"
+)
 
 var Designate string = ""
 
@@ -101,6 +105,26 @@ type Docker struct {
 	SameSource bool `default:"false"`
 }
 
+type Admin struct {
+	Email      string `json:"email"`
+	Password   string `json:"password"`
+	Secret     string `json:"secret"`
+	TotpKey    string `json:"totp_key"`
+	Configured bool   `json:"configure"`
+	Domain     string `json:"domain"`
+	HashKey    string `json:"hash_key"`
+	BlockKey   string `json:"block_key"`
+}
+
+type User struct {
+	ID       string    `json:"id"`
+	Email    string    `json:"email"`
+	Admin    bool      `json:"admin"`
+	Created  time.Time `json:"created"`
+	Groups   []string  `json:"groups"`
+	NotAfter time.Time `json:"NotAfter"`
+}
+
 // Config : Primary configuration object
 type Config struct {
 
@@ -137,6 +161,9 @@ type Config struct {
 	// Primary DNS name for services
 	DNSName string `json:"dnsName"`
 
+	// Config for SAML 2fa
+	SAML *SAML `json:"saml"`
+
 	// Base directory for configuration files - default /etc/tiyo
 	ConfigBase string
 
@@ -145,6 +172,9 @@ type Config struct {
 
 	// Timeout - constant TIMEOUT
 	TIMEOUT time.Duration
+
+	// Admin user
+	Admin *Admin `json:"admin,omitempty"`
 }
 
 // NewConfig : Create a new configuration object and load the config file
