@@ -34,6 +34,9 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/notapipeline/tiyo/pkg/config"
+	"github.com/notapipeline/tiyo/pkg/flow/docker"
+	kube "github.com/notapipeline/tiyo/pkg/flow/kubernetes"
+
 	"github.com/notapipeline/tiyo/pkg/pipeline"
 	"github.com/notapipeline/tiyo/pkg/server/api"
 )
@@ -51,10 +54,10 @@ type Flow struct {
 	Pipeline *pipeline.Pipeline
 
 	// The docker engine
-	Docker *Docker
+	Docker *docker.Docker
 
 	// Kubernetes engine
-	Kubernetes *Kubernetes
+	Kubernetes *kube.Kubernetes
 
 	// Flags expected for execution of Flow
 	Flags *flag.FlagSet
@@ -149,7 +152,7 @@ func (flow *Flow) Cleanup(path string, owd string, err error) error {
 func (flow *Flow) WriteDockerfile(instance *pipeline.Command) error {
 	log.Info("Creating Dockerfile ", instance.Image)
 	var name string = "Dockerfile"
-	template := fmt.Sprintf(dockerTemplate, instance.Image)
+	template := fmt.Sprintf(docker.TiyoTemplate, instance.Image)
 	if instance.Language == "dockerfile" && instance.Custom {
 		var (
 			script []byte
@@ -246,14 +249,14 @@ func (flow *Flow) Setup(pipelineName string) bool {
 	flow.Queue = NewQueue(flow.Config, flow.Pipeline, flow.Pipeline.BucketName)
 
 	// create docker engine
-	flow.Docker = NewDockerEngine(flow.Config)
+	flow.Docker = docker.NewDockerEngine(flow.Config)
 	if err != nil {
 		log.Error(err)
 		return false
 	}
 
 	// create the Kubernetes engine
-	flow.Kubernetes, err = NewKubernetes(flow.Config, flow.Pipeline)
+	flow.Kubernetes, err = kube.NewKubernetes(flow.Config, flow.Pipeline)
 	if err != nil {
 		log.Error(err)
 		return false

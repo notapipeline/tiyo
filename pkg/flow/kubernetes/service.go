@@ -1,10 +1,17 @@
-package flow
+// Copyright 2021 The Tiyo authors
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+package kubernetes
 
 import (
 	"context"
 	"fmt"
 	"time"
 
+	"github.com/notapipeline/tiyo/pkg/flow/nginx"
 	"github.com/notapipeline/tiyo/pkg/pipeline"
 	log "github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
@@ -133,21 +140,7 @@ func (kube *Kubernetes) ServiceExists(name string) bool {
 }
 
 // ServicePort : Address and port information for sending into NGINX
-type ServicePort struct {
-
-	// The node IP address
-	Address string
-
-	// The service node port
-	Port int32
-
-	// IsHttp port
-	HttpPort bool
-
-	Protocol corev1.Protocol
-}
-
-func (kube *Kubernetes) ServiceNodePorts(name string) *[]ServicePort {
+func (kube *Kubernetes) ServiceNodePorts(name string) *[]nginx.ServicePort {
 	list, err := kube.ClientSet.CoreV1().Services(kube.Config.Kubernetes.Namespace).List(
 		context.TODO(), metav1.ListOptions{})
 	if err != nil {
@@ -156,7 +149,7 @@ func (kube *Kubernetes) ServiceNodePorts(name string) *[]ServicePort {
 
 	nodeAddresses := kube.GetExternalNodeIPs()
 	log.Debug(fmt.Sprintf("ServiceNodePorts: Got %d node addresses for name %s", len(nodeAddresses), name))
-	servicePorts := make([]ServicePort, 0)
+	servicePorts := make([]nginx.ServicePort, 0)
 	for _, item := range list.Items {
 		if item.Name != name {
 			continue
@@ -165,7 +158,7 @@ func (kube *Kubernetes) ServiceNodePorts(name string) *[]ServicePort {
 		log.Debug("Got service spec ports ", len(item.Spec.Ports))
 		for _, port := range item.Spec.Ports {
 			for _, addr := range nodeAddresses {
-				servicePort := ServicePort{}
+				servicePort := nginx.ServicePort{}
 				servicePort.Address = addr
 				servicePort.Port = port.NodePort
 				servicePort.Protocol = port.Protocol

@@ -4,10 +4,9 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-package flow
+package kubernetes
 
 import (
-	"context"
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
@@ -18,7 +17,6 @@ import (
 	serverApi "github.com/notapipeline/tiyo/pkg/server/api"
 	log "github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -141,16 +139,6 @@ func (kube *Kubernetes) IsExistingResource(name string) bool {
 	return kube.DeploymentExists(name) || kube.StatefulSetExists(name) || kube.DaemonSetExists(name)
 }
 
-func (kube *Kubernetes) GetVolumeMountForNamespace(namespace string) []corev1.VolumeMount {
-	mounts := make([]corev1.VolumeMount, 0)
-	mount := corev1.VolumeMount{
-		Name:      kube.Config.Kubernetes.Volume,
-		MountPath: kube.Config.SequenceBaseDir,
-	}
-	mounts = append(mounts, mount)
-	return mounts
-}
-
 func (kube *Kubernetes) GetContainerPorts(instance *pipeline.Command) []corev1.ContainerPort {
 	ports := make([]corev1.ContainerPort, 0)
 
@@ -167,13 +155,4 @@ func (kube *Kubernetes) GetContainerPorts(instance *pipeline.Command) []corev1.C
 		}
 	}
 	return ports
-}
-
-func (kube *Kubernetes) CreateNamespace() {
-	spec := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: kube.Config.Kubernetes.Namespace,
-		},
-	}
-	kube.ClientSet.CoreV1().Namespaces().Create(context.TODO(), spec, metav1.CreateOptions{})
 }

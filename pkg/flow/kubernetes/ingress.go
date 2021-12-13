@@ -1,10 +1,17 @@
-package flow
+// Copyright 2021 The Tiyo authors
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+package kubernetes
 
 import (
 	"context"
 	"fmt"
 	"time"
 
+	"github.com/notapipeline/tiyo/pkg/flow/nginx"
 	"github.com/notapipeline/tiyo/pkg/pipeline"
 	log "github.com/sirupsen/logrus"
 	networkv1 "k8s.io/api/networking/v1"
@@ -95,7 +102,7 @@ func (kube *Kubernetes) IngressRules(serviceName string, instances []*pipeline.C
 		log.Debug("Firing Create nginx config with ", rules, servicePorts)
 		container := kube.Pipeline.ContainerFromServiceName(serviceName)
 		if container != nil {
-			CreateNginxConfig(kube.Config, serviceName, rules, servicePorts)
+			nginx.CreateNginxConfig(kube.Config, serviceName, rules, servicePorts)
 		}
 	}
 
