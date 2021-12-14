@@ -49,9 +49,11 @@ type API struct {
 }
 
 // NewAPI : Create a new API instance
-func NewAPI(dbName string, config *config.Config) (*API, error) {
-	api := API{}
-	api.Config = config
+func NewAPI(dbName string, c *config.Config) (*API, error) {
+	api := API{
+		Config: c,
+	}
+
 	var err error
 	api.Db, err = bolt.Open(dbName, 0600, &bolt.Options{Timeout: 2 * time.Second})
 	if err != nil {

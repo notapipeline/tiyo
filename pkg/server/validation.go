@@ -72,9 +72,16 @@ func (server *Server) RequireAccount(c *gin.Context) {
 					return
 				}
 
+				var jwtGroups []string = jwtSessionClaims.Attributes["Groups"]
+				groups := make([]config.Group, 0)
+				for _, g := range jwtGroups {
+					group, _ := server.config.FindGroup(g)
+					groups = append(groups, *group)
+				}
+
 				user := &config.User{
 					Email:  email,
-					Groups: jwtSessionClaims.Attributes["Groups"],
+					Groups: groups,
 				}
 				server.signinSession(user, c)
 				return

@@ -47,7 +47,7 @@ func (api *API) Encrypt(c *gin.Context) {
 	}
 
 	var passphrase []byte
-	if passphrase, err = encrypt([]byte(request["value"]), api.Config.GetPassphrase("assemble")); err != nil {
+	if passphrase, err = EncryptData([]byte(request["value"]), api.Config.GetPassphrase("assemble")); err != nil {
 		result := Result{
 			Code:    500,
 			Result:  "Error",
@@ -126,7 +126,7 @@ func (api *API) Decrypt(c *gin.Context) {
 	}
 
 	decoded, _ = base64.StdEncoding.DecodeString(token)
-	if decoded, err = decrypt(decoded, assemblePhrase); err != nil || string(decoded) != assemblePhrase {
+	if decoded, err = DecryptData(decoded, assemblePhrase); err != nil || string(decoded) != assemblePhrase {
 		result := Result{
 			Code:    400,
 			Result:  "Error",
@@ -137,7 +137,7 @@ func (api *API) Decrypt(c *gin.Context) {
 	}
 	var passphrase []byte
 	passphrase, _ = base64.StdEncoding.DecodeString(value)
-	if passphrase, err = decrypt(passphrase, assemblePhrase); err != nil {
+	if passphrase, err = DecryptData(passphrase, assemblePhrase); err != nil {
 		result := Result{
 			Code:    500,
 			Result:  "Error",
@@ -160,7 +160,7 @@ func createHash(key string) []byte {
 	return data[:]
 }
 
-func encrypt(data []byte, passphrase string) ([]byte, error) {
+func EncryptData(data []byte, passphrase string) ([]byte, error) {
 	block, err := aes.NewCipher(createHash(passphrase))
 	if err != nil {
 		return nil, err
@@ -177,7 +177,7 @@ func encrypt(data []byte, passphrase string) ([]byte, error) {
 	return ciphertext, nil
 }
 
-func decrypt(data []byte, passphrase string) ([]byte, error) {
+func DecryptData(data []byte, passphrase string) ([]byte, error) {
 	key := []byte(createHash(passphrase))
 	block, err := aes.NewCipher(key)
 	if err != nil {

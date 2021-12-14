@@ -29,7 +29,6 @@ type Web struct {
 	Admin    bool
 	SamlM    *samlsp.Middleware
 	Saml     config.SAML
-	Info     config.Admin
 	User     config.User
 	Errors   []string
 
@@ -51,7 +50,6 @@ func NewWeb(c *gin.Context, conf *config.Config) *Web {
 		Time:     time.Now(),
 		SamlM:    conf.SAML.SamlSP,
 		Saml:     *conf.SAML,
-		Info:     *conf.Admin,
 		Errors:   make([]string, 0),
 	}
 

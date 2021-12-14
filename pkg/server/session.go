@@ -13,39 +13,47 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+type signin struct {
+	Email    string `form:"email"`
+	Password string `form:"password"`
+	Otp      string `form:"otpkey,omitempty"`
+}
+
 func (server *Server) Signin(c *gin.Context) {
 	web := NewWeb(c, server.config)
 
-	request := make(map[string]string)
+	request := signin{}
 	if err := c.ShouldBind(&request); err != nil {
 		log.Error("Failed to bind signin session")
 		c.Redirect(http.StatusFound, "/signin")
 		return
 	}
-	if c.Request.Method == "POST" && len(request) != 0 {
+
+	if c.Request.Method == "POST" {
 		log.Debug("Validating signin request")
-		if request["email"] != server.config.Admin.Email {
+		var (
+			user *config.User
+			err  error
+		)
+
+		// blame the user even if the database fails???
+		if user, err = server.config.FindUser(request.Email); user == nil || err != nil {
 			c.Redirect(http.StatusFound, "/signin?error=invalidemail")
 			return
 		}
 
-		configPassword, _ := b64.StdEncoding.DecodeString(server.config.Admin.Password)
-		if err := bcrypt.CompareHashAndPassword(configPassword, []byte(request["password"])); err != nil {
+		configPassword, _ := b64.StdEncoding.DecodeString(user.Password)
+		if err := bcrypt.CompareHashAndPassword(configPassword, []byte(request.Password)); err != nil {
 			c.Redirect(http.StatusFound, "/signin?error=invalidpassword")
 			return
 		}
 
-		if server.config.Admin.TotpKey != "" && !totp.Validate(request["totp"], server.config.Admin.TotpKey) {
+		if user.TotpKey != "" && !totp.Validate(request.Otp, user.TotpKey) {
 			c.Redirect(http.StatusFound, "/signin?error=invalidpasscode")
 			return
 		}
 
-		user := config.User{
-			Admin: true,
-			Email: request["email"],
-		}
-
-		if err := server.signinSession(&user, c); err != nil {
+		if err := server.signinSession(user, c); err != nil {
 			log.Error(err)
 		}
 		c.Redirect(http.StatusFound, "/")
@@ -90,7 +98,6 @@ func (server *Server) signinSession(user *config.User, c *gin.Context) error {
 	expires := time.Now().Add(12 * time.Hour)
 	session := sessions.Default(c)
 	if session != nil {
-		session.Set("Admin", user.Admin)
 		session.Set("User", *user)
 		session.Set("NotBefore", time.Now())
 		session.Set("NotAfter", expires)

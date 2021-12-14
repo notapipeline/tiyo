@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/boltdb/bolt"
 	"github.com/gin-contrib/multitemplate"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
@@ -55,6 +56,9 @@ type Server struct {
 
 	// Primary configuration of the assemble server component
 	config *config.Config
+
+	// Users database
+	users *Lockable
 }
 
 // NewServer : Create a new Server instance
@@ -94,7 +98,12 @@ func NewServer() *Server {
 
 // Init : initialises the server environment
 func (server *Server) Init() {
-	var err error
+	var (
+		usersDbName string = filepath.Join(server.config.DbDir, "users.db")
+		err         error
+		db          *bolt.DB
+	)
+
 	if server.config, err = config.NewConfig(); err != nil {
 		log.Error("Failed to load config ", err)
 		return
@@ -125,6 +134,16 @@ func (server *Server) Init() {
 	// if dbname is not set by flag or environment, set it as the application basename
 	if server.Dbname == "" {
 		server.Dbname = fmt.Sprintf("%s.db", path.Base(os.Args[0]))
+	}
+
+	db, err = bolt.Open(usersDbName, 0600, &bolt.Options{Timeout: 2 * time.Second})
+	if err != nil {
+		log.Error("Failed to open users database", err)
+		return
+	}
+
+	server.users = &Lockable{
+		Db: db,
 	}
 }
 

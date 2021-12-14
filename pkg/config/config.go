@@ -105,26 +105,6 @@ type Docker struct {
 	SameSource bool `default:"false"`
 }
 
-type Admin struct {
-	Email      string `json:"email"`
-	Password   string `json:"password"`
-	Secret     string `json:"secret"`
-	TotpKey    string `json:"totp_key"`
-	Configured bool   `json:"configure"`
-	Domain     string `json:"domain"`
-	HashKey    string `json:"hash_key"`
-	BlockKey   string `json:"block_key"`
-}
-
-type User struct {
-	ID       string    `json:"id"`
-	Email    string    `json:"email"`
-	Admin    bool      `json:"admin"`
-	Created  time.Time `json:"created"`
-	Groups   []string  `json:"groups"`
-	NotAfter time.Time `json:"NotAfter"`
-}
-
 // Config : Primary configuration object
 type Config struct {
 
@@ -172,9 +152,6 @@ type Config struct {
 
 	// Timeout - constant TIMEOUT
 	TIMEOUT time.Duration
-
-	// Admin user
-	Admin *Admin `json:"admin,omitempty"`
 }
 
 // NewConfig : Create a new configuration object and load the config file
@@ -251,8 +228,8 @@ func NewConfig() (*Config, error) {
 			config.Kubernetes.ConfigFile = kubeconfig
 		}
 
-		// don't panic if we're syphon, we don't need kubeconfig
-		if _, err = os.Stat(config.Kubernetes.ConfigFile); os.IsNotExist(err) && Designate != "syphon" {
+		// don't panic if we're not flow, we don't need kubeconfig
+		if _, err = os.Stat(config.Kubernetes.ConfigFile); os.IsNotExist(err) && Designate == "flow" {
 			return nil, err
 		}
 	}
