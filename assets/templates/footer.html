@@ -1,0 +1,123 @@
+    </body>
+
+
+<!-- Mustache templates -->
+
+<script id="sourcetpl" type="x-tmpl-mustache">
+{{#list}}
+<li class="uk-card uk-card-default uk-card-body source-element element-list-element">
+    <image src="/static/img/source/{{.}}.svg" alt="{{.}}" uk-tooltip="{{.}}" />
+</li>
+{{/list}}
+</script>
+
+<script id="kubernetestpl" type="x-tmpl-mustache">
+{{#list}}
+<li class="uk-card uk-card-default uk-card-body kubernetes-element element-list-element">
+    <image src="/static/img/kubernetes/{{.}}.svg" alt="{{.}}" uk-tooltip="{{.}}" />
+</li>
+{{/list}}
+</script>
+
+<script id="containertpl" type="x-tmpl-mustache">
+{{#list}}
+<li class="uk-card uk-card-default uk-card-body container-element element-list-element">
+    <image src="/static/img/container/{{.}}.svg" alt="{{.}}" uk-tooltip="{{.}}" />
+</li>
+{{/list}}
+</script>
+
+
+
+
+<!-- buckets -->
+<script id="template" type="x-tmpl-mustache">
+    <table class="uk-table">
+    <tbody>
+    {{#list}}
+        <tr><td><a onclick="doPrefixScan('{{.}}')">{{.}}</a></td></tr>
+    {{/list}}
+    </tbody>
+</table>
+</script>
+
+<script id="openpipelinetpl" type="x-tmpl-mustache">
+<ul>
+    {{#each list}}
+    <li><a onclick="openPipeline('{{@key}}')">{{@key}}</a></li>
+    {{/each}}
+</ul>
+</script>
+
+<!-- applications -->
+<script id="applicationstpl" type="x-tmpl-mustache">
+<ul uk-sortable="handle: .uk-sortable-handle" class="uk-grid-stack uk-height-max-large" id="pipeline-apps-list">
+    {{#list}}
+    <li class="uk-first-column" style="margin-bottom: 5px;">
+        <div class="uk-card uk-card-default uk-card-body">
+        <span class="uk-sortable-handle uk-margin-small-right uk-text-center uk-icon" uk-icon="icon: table"></span>{{.}}
+        </div>
+    </li>
+    {{/list}}
+</ul>
+</script>
+
+<!-- Key list -->
+<script id="exploretpl" type="x-tmpl-mustache">
+{{#if buckets.length}}
+  <h3 style="margin-top: 30px;">Buckets<span style="float:right">{{bucketlen}} items</span></h3>
+  <ul>
+    {{#buckets}}
+    <li style="text-align: left;"><a onclick="scan('{{.}}')">{{.}}</a></li>
+    {{/buckets}}
+  </ul>
+{{/if}}
+{{#if keylen}}
+<h3>Keys<span style="float:right">{{keylen}} items</span></h3>
+<table class="uk-table" id="{{id}}">
+    <thead>
+        <tr>
+        <th style="text-align: right;">Key</th>
+        <th style="text-align: left;">Value</th>
+        <th style="text-align: right;">Delete</th>
+        </tr>
+    </thead>
+    <tbody>
+    {{#each keys}}
+        <tr>
+            <td style="text-align: right;">{{@key}}</td>
+            <td style="text-align: left;" class="editable">{{this}}</td>
+            <td style="text-align: right;"><a onclick="doDelete('{{@key}}')">[x]</a></td>
+        </tr>
+   {{/each}}
+    </tbody>
+</table>
+{{/if}}
+</script>
+
+<!-- Page load scripts -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/ace.min.js"></script>
+<script language="javascript">
+ace.config.set("packaged", true);
+ace.config.set("basePath", "https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/");
+
+
+var links = [];
+var defaultAttrs = {
+    kubernetes: {
+        scale: 0,
+    },
+    container: {
+        script: true,
+        custom: true,
+    },
+    source: {}
+}
+</script>
+
+<script src="/static/js/collections/collection.js"></script>
+<script src="/static/js/pipeline.js"></script>
+<script src="/static/js/page.js"></script>
+<script src="/static/js/api.js"></script>
+<script src="/static/js/router.js"></script>
+</html>

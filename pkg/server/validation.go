@@ -16,7 +16,6 @@ import (
 	"github.com/crewjam/saml/samlsp"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
-	"github.com/notapipeline/tiyo/pkg/config"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -27,21 +26,34 @@ var (
 )
 
 func (server *Server) RequireAccount(c *gin.Context) {
-	/*if !server.config.Configured {
-		log.Debug("Routing to configurator")
+	if admin, _ := server.FindGroup("admin"); admin == nil {
+		log.Warn("Assemble not configured")
 		c.Redirect(http.StatusFound, "/configure")
 		return
-	}*/
+	}
+
+	if token := c.Request.Header.Get("X-Auth-Token"); token != "" {
+		ip := c.ClientIP()
+		key := server.FindMachine(ip)
+		if token != key {
+			c.JSON(http.StatusForbidden, struct {
+				Forbidden string
+			}{
+				Forbidden: "The resource you are trying to access is refused by policy",
+			})
+		}
+		return
+	}
 
 	section := strings.Trim(strings.Split(c.Request.RequestURI, "?")[0], "/")
-	if section == "signin" || section == "signout" {
+	if section == "login" || section == "logout" {
 		return
 	}
 
 	current := sessions.Default(c)
 	if current == nil {
 		log.Warnf("No session set for %s", c.Request.URL)
-		c.Redirect(http.StatusFound, "/signin")
+		c.Redirect(http.StatusFound, "/login")
 		return
 	}
 
@@ -73,13 +85,13 @@ func (server *Server) RequireAccount(c *gin.Context) {
 				}
 
 				var jwtGroups []string = jwtSessionClaims.Attributes["Groups"]
-				groups := make([]config.Group, 0)
+				groups := make([]Group, 0)
 				for _, g := range jwtGroups {
-					group, _ := server.config.FindGroup(g)
+					group, _ := server.FindGroup(g)
 					groups = append(groups, *group)
 				}
 
-				user := &config.User{
+				user := &User{
 					Email:  email,
 					Groups: groups,
 				}
@@ -89,7 +101,7 @@ func (server *Server) RequireAccount(c *gin.Context) {
 		}
 	}
 
-	c.Redirect(http.StatusFound, "/signin")
+	c.Redirect(http.StatusFound, "/login")
 }
 
 func (server *Server) ValidateSession(session sessions.Session) error {

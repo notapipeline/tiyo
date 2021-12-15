@@ -9,9 +9,11 @@ package api
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"io"
 
@@ -178,6 +180,9 @@ func EncryptData(data []byte, passphrase string) ([]byte, error) {
 }
 
 func DecryptData(data []byte, passphrase string) ([]byte, error) {
+	if len(data) == 0 {
+		return []byte(""), nil
+	}
 	key := []byte(createHash(passphrase))
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -194,4 +199,10 @@ func DecryptData(data []byte, passphrase string) ([]byte, error) {
 		return nil, err
 	}
 	return plaintext, nil
+}
+
+func Hmac(secret []byte, data []byte) []byte {
+	h := hmac.New(sha256.New, secret)
+	h.Write(data)
+	return []byte(hex.EncodeToString(h.Sum(nil)))
 }

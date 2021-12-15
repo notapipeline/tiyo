@@ -210,6 +210,10 @@ func NewConfig() (*Config, error) {
 		config.Kubernetes.ConfigFile = "config"
 	}
 
+	if config.SAML == nil {
+		config.SAML = &SAML{}
+	}
+
 	var home string
 	if home, err = os.UserHomeDir(); err != nil {
 		// assume running as root

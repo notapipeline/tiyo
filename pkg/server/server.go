@@ -8,8 +8,10 @@
 package server
 
 import (
+	"encoding/gob"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"path"
 	"path/filepath"
@@ -90,8 +92,8 @@ func NewServer() *Server {
 	server.engine = gin.New()
 	server.engine.Use(Logger(logfile, mode), gin.Recovery())
 
-	server.router = server.engine.Group("/")
-	server.router.Use(sessions.Sessions(config.SESSION_COOKIE_NAME, server.securetoken))
+	gob.Register(time.Time{})
+	gob.Register(User{})
 
 	return &server
 }
@@ -99,9 +101,8 @@ func NewServer() *Server {
 // Init : initialises the server environment
 func (server *Server) Init() {
 	var (
-		usersDbName string = filepath.Join(server.config.DbDir, "users.db")
-		err         error
-		db          *bolt.DB
+		err error
+		db  *bolt.DB
 	)
 
 	if server.config, err = config.NewConfig(); err != nil {
@@ -136,6 +137,7 @@ func (server *Server) Init() {
 		server.Dbname = fmt.Sprintf("%s.db", path.Base(os.Args[0]))
 	}
 
+	var usersDbName string = filepath.Join(server.config.DbDir, "users.db")
 	db, err = bolt.Open(usersDbName, 0600, &bolt.Options{Timeout: 2 * time.Second})
 	if err != nil {
 		log.Error("Failed to open users database", err)
@@ -145,6 +147,24 @@ func (server *Server) Init() {
 	server.users = &Lockable{
 		Db: db,
 	}
+
+	if err := server.CreateTables(); err != nil {
+		log.Error("Failed to setup database")
+		return
+	}
+
+	server.securetoken = cookie.NewStore([]byte(config.SESSION_COOKIE_NAME))
+	server.securetoken.Options(sessions.Options{
+		MaxAge:   60 * 60 * 12,
+		Secure:   true,
+		HttpOnly: true,
+		Domain:   server.config.Assemble.Host,
+		Path:     "/",
+	})
+
+	server.router = server.engine.Group("/")
+	server.router.Use(sessions.Sessions(config.SESSION_COOKIE_NAME, server.securetoken))
+
 }
 
 func (server *Server) Engine() *gin.Engine {
@@ -171,14 +191,11 @@ func (server *Server) Run() int {
 	server.setupRoutes(bfs)
 
 	render := multitemplate.New()
-	render.Add("index", LoadTemplates("index.tpl"))
+	render.Add("index", LoadTemplates("index.tpl", "header.html", "footer.html"))
+	render.Add("configure", LoadTemplates("configure.tpl", "header.html", "footer.html"))
+	render.Add("login", LoadTemplates("login.tpl", "header.html", "footer.html"))
+	render.Add("error", LoadTemplates("error.tpl", "header.html", "footer.html"))
 	server.engine.HTMLRender = render
-
-	server.engine.GET("/ping", func(c *gin.Context) {
-		c.JSON(200, gin.H{
-			"message": "pong",
-		})
-	})
 
 	host := fmt.Sprintf("%s:%d", server.config.Assemble.Host, server.config.Assemble.Port)
 	log.Info(host)
@@ -218,4 +235,75 @@ func (server *Server) shouldRedirect(c *gin.Context) bool {
 		return session.Get("NotAfter") != nil && time.Now().Before(session.Get("NotAfter").(time.Time))
 	}
 	return false
+}
+
+type login struct {
+	Email    string `form:"email"`
+	Password string `form:"password"`
+	Confirm  string `form:"confirmPassword,omitempty"`
+	Otp      string `form:"otp,omitempty"`
+}
+
+func (server *Server) Configure(c *gin.Context) {
+	if c.Request.Method == http.MethodPost {
+		request := login{}
+		if err := c.ShouldBind(&request); err != nil {
+			server.Error(c, 500, err)
+		}
+
+		if request.Password != request.Confirm {
+			c.Redirect(http.StatusFound, "/configure?error=invalidpassword")
+			return
+		}
+
+		id, _ := server.AddPermission("admin")
+		perms := make([]Permission, 0)
+		perms = append(perms, Permission{
+			ID: id,
+		})
+
+		server.AddGroup(&Group{
+			Name:        "admin",
+			Permissions: perms,
+		})
+
+		adminGroups := make([]Group, 0)
+		g, err := server.FindGroup("admin")
+		if err != nil {
+			log.Errorf("Unable to find admin group : %+v", err)
+		}
+
+		adminGroups = append(adminGroups, *g)
+
+		var user User = User{
+			Email:    request.Email,
+			Password: request.Password,
+			TotpKey:  request.Otp,
+			Groups:   adminGroups,
+		}
+		if err := server.AddUser(&user); err != nil {
+			server.Error(c, http.StatusInternalServerError, err)
+		}
+
+		c.Redirect(http.StatusFound, "/")
+		return
+	}
+	c.HTML(200, "configure", gin.H{
+		"Title": "TIYO - Kubernetes made easy",
+	})
+}
+
+func (s *Server) hmac(c *gin.Context) {
+	client := c.ClientIP()
+	hmac := s.getHmac(client)
+	if hmac == "" {
+		log.Warnf("Attempt to access HMAC endpoint by unknown client IP %s", client)
+		c.JSON(http.StatusForbidden, struct{ Forbidden string }{
+			Forbidden: "You have attempted to access a restricted endpoint, this interaction has been recorded",
+		})
+		return
+	}
+	c.JSON(http.StatusOK, struct {
+		Hmac string `json:"hmac"`
+	}{Hmac: hmac})
 }

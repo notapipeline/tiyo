@@ -7,12 +7,20 @@
 package server
 
 func (server *Server) setupRoutes(bfs *BinFileSystem) {
+	server.router.Use(server.RequireAccount)
+
+	server.engine.GET("/configure", server.Configure)
+	server.engine.POST("/configure", server.Configure)
+
 	// page methods
-	server.engine.GET("/", server.Index)
-	server.engine.GET("/pipeline", server.Index)
-	server.engine.GET("/scan", server.Index)
-	server.engine.GET("/scan/:bucket", server.Index)
-	server.engine.GET("/buckets", server.Index)
+	server.router.GET("/", server.Index)
+	server.router.GET("/pipeline", server.Index)
+	server.router.GET("/scan", server.Index)
+	server.router.GET("/scan/:bucket", server.Index)
+	server.router.GET("/buckets", server.Index)
+	server.router.GET("/login", server.Signin)
+	server.router.POST("/login", server.Signin)
+	server.router.GET("/logout", server.Signout)
 
 	// api methods
 	server.engine.GET("/api/v1/bucket", server.api.Buckets)

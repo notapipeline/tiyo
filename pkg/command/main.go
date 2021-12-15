@@ -38,6 +38,7 @@ var acceptedCommands = []string{
 	"assemble",
 	"fill",
 	"flow",
+	"crypt",
 	"syphon",
 	"help",
 	"version",
@@ -105,6 +106,8 @@ func Run(args []string) int {
 	switch command {
 	case "help":
 		Usage()
+		return 0
+	case "machine":
 		return 0
 	case "version":
 		fmt.Printf("%s version %s\n", filepath.Base(os.Args[0]), VERSION)
