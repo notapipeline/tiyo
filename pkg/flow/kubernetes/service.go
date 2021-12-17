@@ -162,7 +162,7 @@ func (kube *Kubernetes) ServiceNodePorts(name string) *[]nginx.ServicePort {
 				servicePort.Address = addr
 				servicePort.Port = port.NodePort
 				servicePort.Protocol = port.Protocol
-				servicePort.HttpPort = port.TargetPort.IntVal == 80
+				servicePort.HttpPort = kube.isHttpPort(port.TargetPort.IntVal)
 				log.Debug("Adding port ", servicePort.Port)
 				servicePorts = append(servicePorts, servicePort)
 			}
@@ -170,4 +170,8 @@ func (kube *Kubernetes) ServiceNodePorts(name string) *[]nginx.ServicePort {
 	}
 	log.Debug(fmt.Sprintf("Found external node service ports %+v", servicePorts))
 	return &servicePorts
+}
+
+func (kube *Kubernetes) isHttpPort(port int32) bool {
+	return !(port == 443 || port == 8443 || port == 9443)
 }

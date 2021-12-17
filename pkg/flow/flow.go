@@ -99,8 +99,7 @@ func (flow *Flow) Init() {
 func (flow *Flow) Create(instance *pipeline.Command) error {
 	log.Info("flow - Creating new container instance for ", instance.Name, " ", instance.ID)
 
-	// Not sure this is still required or true...
-	/*var containerExists bool
+	var containerExists bool
 	var err error
 	containerExists, err = flow.Docker.ContainerExists(instance.Tag)
 	if err != nil {
@@ -110,7 +109,7 @@ func (flow *Flow) Create(instance *pipeline.Command) error {
 	if containerExists && !flow.update {
 		log.Info("Not building image for ", instance.Image, " Image exists")
 		return nil
-	}*/
+	}
 
 	path := fmt.Sprintf("containers/%s", instance.Tag)
 	if _, err := os.Stat(path); os.IsNotExist(err) {

@@ -15,6 +15,10 @@ map $http_upgrade $connection_upgrade {
     ''      close;
 }
 
+{{ $upslen := len .Nginx.UpstreamPlain.Addresses }}
+{{ $upsseclen := len .Nginx.UpstreamSecure.Addresses }}
+
+{{ if gt $upslen 0 }}
 upstream {{.Nginx.UpstreamPlain.Name}} {
 {{- range $option := .Nginx.UpstreamPlain.Options}}
     {{$option}}
@@ -23,7 +27,9 @@ upstream {{.Nginx.UpstreamPlain.Name}} {
     server {{$srv}};
 {{- end}}
 }
+{{ end }}
 
+{{ if gt $upsseclen 0 }}
 upstream {{.Nginx.UpstreamSecure.Name}} {
 {{- range $option := .Nginx.UpstreamSecure.Options}}
     {{$option}}
@@ -32,6 +38,7 @@ upstream {{.Nginx.UpstreamSecure.Name}} {
     server {{$srv}};
 {{- end}}
 }
+{{ end }}
 
 {{- range $listener := .Nginx.Listeners }}
 server {

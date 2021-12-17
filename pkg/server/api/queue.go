@@ -206,7 +206,6 @@ func (api *API) PopQueue(c *gin.Context) {
 
 	var id string = queue[activeKey]
 	var str []string = strings.Split(activeKey, ":")
-	log.Debug(str, len(str))
 	if len(str) == 0 {
 		result.Code = 202
 		result.Message = ""
@@ -283,9 +282,7 @@ func (api *API) PerpetualQueue(c *gin.Context) {
 		b := tx.Bucket([]byte("queue")).Bucket([]byte(pipeline.BucketName))
 		log.Debug("Starting queue count for ", pipelineName)
 		c := b.Cursor()
-		log.Debug(c)
 		for k, _ := c.First(); k != nil; k, _ = c.Next() {
-			log.Debug("K == ", k)
 			count++
 		}
 		return nil

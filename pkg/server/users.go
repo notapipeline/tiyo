@@ -408,10 +408,11 @@ func (s *Server) FindMachine(address string) string {
 
 func (s *Server) AddMachine(address string) string {
 	var (
-		key []byte
+		key string
 		err error
 	)
-	if key, err = s.find(address, MACHINE_TOKENS); err != nil && key == nil {
+	if key = s.FindMachine(address); key == "" {
+		log.Infof("Generating key for %s", address)
 		var (
 			token      string = `{"token": "%s", "validFor": "%s", "expires": "%s"}`
 			passphrase string = ""
@@ -448,22 +449,18 @@ func (s *Server) AddMachine(address string) string {
 		passphrase = string(pBytes)
 
 		token = fmt.Sprintf(token, passphrase, address, expiry)
-		token = base64.StdEncoding.EncodeToString([]byte(token))
-		key = []byte(token)
-		if err = s.replace(address, MACHINE_TOKENS, token); err != nil {
-			log.Error("Failed to add or update machine instance %s, %s", address, err)
-			key = []byte("")
+		key = base64.StdEncoding.EncodeToString([]byte(token))
+		if err = s.replace(address, MACHINE_TOKENS, key); err != nil {
+			log.Errorf("Failed to add or update machine instance %s, %s", address, err)
+			key = ""
 		}
 	}
-	return string(key)
+	log.Info("returning %s", key)
+	return key
 }
 
 func (s *Server) getHmac(ip string) string {
-	h, err := s.find(ip, MACHINE_HMAC)
-	if h == nil || err != nil {
-		return ""
-	}
-	return string(h)
+	return s.get(ip, MACHINE_HMAC)
 }
 
 func (s *Server) get(id, where string) string {

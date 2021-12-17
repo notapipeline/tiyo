@@ -18,9 +18,11 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 
@@ -78,6 +80,7 @@ func (docker *Docker) ContainerExists(tag string) (bool, error) {
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{
 		InsecureSkipVerify: docker.Config.UseInsecureTLS,
 	}
+	http.DefaultClient.Timeout = 10 * time.Second
 
 	// API is the easiest but maybe not the most versatile method of checking
 	// This will be potentially very different for artifactory/nexus/quay and
@@ -86,9 +89,11 @@ func (docker *Docker) ContainerExists(tag string) (bool, error) {
 	for {
 		log.Debug("Making request to ", address)
 		response, err = http.Get(address)
-		if errors.Is(err, context.DeadlineExceeded) {
+		if err, ok := err.(net.Error); ok && err.Timeout() || errors.Is(err, context.DeadlineExceeded) {
 			// This is probably temporary and a retry
 			// will allow it to succeed.
+			log.Info("Context deadline exceeded - will retry in 5 seconds")
+			time.Sleep(5 * time.Second)
 			continue
 		} else if response != nil && response.StatusCode == http.StatusServiceUnavailable {
 			if retry >= maxretry {
@@ -97,6 +102,7 @@ func (docker *Docker) ContainerExists(tag string) (bool, error) {
 			retry++
 			continue
 		} else if err != nil {
+			log.Warn("Using default error handler for docker requests")
 			return false, err
 		}
 

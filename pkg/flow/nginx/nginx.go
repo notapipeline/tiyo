@@ -68,6 +68,8 @@ type Location struct {
 	// The name of an upstream to proxy against
 	Upstream string
 
+	UpstreamSecure string
+
 	// Skip verification check on the backend
 	SkipVerify bool
 
@@ -189,13 +191,19 @@ func CreateNginxConfig(config *config.Config, name string, rules []networkv1.Ing
 			Protocol: "https",
 		}
 
+		var secure bool = false
+		if len(addressesPlain) == 0 {
+			secure = true
+		}
+
 		for range rule.HTTP.Paths {
 			location := Location{
-				Path:     "/",
-				Upstream: name,
+				Path:           "/",
+				Upstream:       name,
+				UpstreamSecure: fmt.Sprintf("%ssecure", name),
 
 				// TODO: These need to be configurable
-				SecureUpstream: false,
+				SecureUpstream: secure,
 				SkipVerify:     true,
 			}
 			https.Locations = append(http.Locations, &location)

@@ -134,7 +134,6 @@ func (api *API) forwardPost(c *gin.Context, endpoint string) (Result, map[string
 		}
 		return result, content, err
 	}
-	log.Debug(content)
 	data, _ := json.Marshal(content)
 
 	serverAddress := api.Config.FlowServer()

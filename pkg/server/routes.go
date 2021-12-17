@@ -55,4 +55,6 @@ func (server *Server) setupRoutes(bfs *BinFileSystem) {
 	server.engine.POST("/api/v1/encrypt", server.api.Encrypt)
 	server.engine.POST("/api/v1/decrypt", server.api.Decrypt)
 
+	server.engine.POST("/addmachine", server.addmachine)
+	server.engine.GET("/hmac", server.hmac)
 }

@@ -293,14 +293,38 @@ func (server *Server) Configure(c *gin.Context) {
 	})
 }
 
+var forbidden struct{ Forbidden string } = struct{ Forbidden string }{
+	Forbidden: "You have attempted to access a restricted endpoint, this interaction has been recorded",
+}
+
+func (s *Server) addmachine(c *gin.Context) {
+	var client string = c.ClientIP()
+	external, _ := externalIP()
+	if client != "127.0.0.1" && (external != "" && client != external) {
+		log.Warnf("Attempt to access addmachine endpoint by unknown client IP %s", client)
+		c.JSON(http.StatusForbidden, forbidden)
+		return
+	}
+
+	var address struct {
+		Address string `json:"address"`
+	}
+	if err := c.ShouldBind(&address); err != nil || address.Address == "" {
+		log.Errorf("Invalid JSON object - address not provided : %s : %+v", err, address)
+		c.JSON(http.StatusBadRequest, struct{ BadRequest string }{BadRequest: "Address is required"})
+		return
+	}
+
+	var key string = s.AddMachine(address.Address)
+	c.JSON(http.StatusOK, struct{ Key string }{Key: key})
+}
+
 func (s *Server) hmac(c *gin.Context) {
 	client := c.ClientIP()
 	hmac := s.getHmac(client)
 	if hmac == "" {
 		log.Warnf("Attempt to access HMAC endpoint by unknown client IP %s", client)
-		c.JSON(http.StatusForbidden, struct{ Forbidden string }{
-			Forbidden: "You have attempted to access a restricted endpoint, this interaction has been recorded",
-		})
+		c.JSON(http.StatusForbidden, forbidden)
 		return
 	}
 	c.JSON(http.StatusOK, struct {
