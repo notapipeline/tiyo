@@ -170,8 +170,8 @@ class Link {
 
         element.find('.done').click((e) => {
             if (['tcp', 'udp'].includes(attributes.type)) {
-                attributes.source = $('#tcpsourceport').val();
-                attributes.dest = $('#tcpdestport').val();
+                attributes.source = parseInt($('#tcpsourceport').val());
+                attributes.dest = parseInt($('#tcpdestport').val());
                 attributes.address = $('#tcpaddress').val();
             } else if (attributes.type == 'socket') {
                 attributes.path = $('#socketpath').val();

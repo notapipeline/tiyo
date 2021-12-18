@@ -215,6 +215,11 @@ func (flow *Flow) CopyTiyoBinary() error {
 func (flow *Flow) WriteConfig() error {
 	log.Info("Creating stub config for container wrap")
 	path, _ := os.Getwd()
+	host := config.Host{
+		Host:         flow.Config.Flow.Host,
+		Port:         flow.Config.Flow.Port,
+		ClientSecure: flow.Config.Flow.Cacert != "" && flow.Config.Flow.Cakey != "",
+	}
 	config := struct {
 		SequenceBaseDir string      `json:"sequenceBaseDir"`
 		UseInsecureTLS  bool        `json:"skipVerify"`
@@ -223,7 +228,7 @@ func (flow *Flow) WriteConfig() error {
 	}{
 		SequenceBaseDir: flow.Config.SequenceBaseDir,
 		UseInsecureTLS:  flow.Config.UseInsecureTLS,
-		Flow:            flow.Config.Flow,
+		Flow:            host,
 		AppName:         filepath.Base(path),
 	}
 	bytes, err := json.Marshal(config)

@@ -204,7 +204,13 @@ func (docker *Docker) build(tag string) error {
 
 // Create a new container based off the pipeline element
 func (docker *Docker) Create(command *pipeline.Command) error {
-	if err := docker.build(command.Tag); err != nil {
+	var (
+		response io.ReadCloser
+		err      error
+		object   []byte
+	)
+
+	if err = docker.build(command.Tag); err != nil {
 		return err
 	}
 
@@ -213,17 +219,31 @@ func (docker *Docker) Create(command *pipeline.Command) error {
 		Username: docker.Config.Docker.Username,
 		Password: docker.Config.Docker.Token,
 	}
-	object, err := json.Marshal(auth)
+	object, err = json.Marshal(auth)
 	if err != nil {
 		return err
 	}
-	encoded := base64.URLEncoding.EncodeToString(object)
-	response, err := docker.Client.ImagePush(context.Background(), command.Tag, types.ImagePushOptions{
-		RegistryAuth: encoded,
-	})
-	if err != nil {
-		return err
+
+	// required to handle timeout errors from the docker push command
+	for {
+		encoded := base64.URLEncoding.EncodeToString(object)
+		response, err = docker.Client.ImagePush(context.Background(), command.Tag, types.ImagePushOptions{
+			RegistryAuth: encoded,
+		})
+
+		if err, ok := err.(net.Error); ok && err.Timeout() || errors.Is(err, context.DeadlineExceeded) {
+			// This is probably temporary and a retry
+			// will allow it to succeed.
+			log.Info("Context deadline exceeded - will retry in 5 seconds")
+			time.Sleep(5 * time.Second)
+			continue
+		} else if err != nil {
+			log.Warn("Using default error handler for docker requests")
+			return err
+		}
+		break
 	}
+
 	defer response.Close()
 
 	var message ErrorMessage

@@ -569,6 +569,9 @@ func (command *Command) ExecuteWithTimeout(cmd *exec.Cmd, done chan error) int {
 		}
 		break
 	case <-time.After(time.Duration(command.Timeout) * time.Second):
+		if err := cmd.Process.Kill(); err != nil {
+			log.Errorf("Failed to kill command %s - you might have zombies. %s", command.Name, err.Error())
+		}
 		log.Error("Command ", command.Name, " exited due to timeout - ", command.Timeout, " seconds exceeded")
 		break
 	}
