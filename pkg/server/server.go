@@ -65,7 +65,7 @@ type Server struct {
 
 // NewServer : Create a new Server instance
 func NewServer() *Server {
-	server := Server{}
+	s := Server{}
 	mode := os.Getenv("TIYO_LOG")
 	if mode == "" {
 		mode = "production"
@@ -80,6 +80,7 @@ func NewServer() *Server {
 	}
 
 	if err := os.Mkdir(dirname, os.ModePerm); err != nil && !os.IsExist(err) {
+		log.Fatal(err)
 		return nil
 	}
 
@@ -89,13 +90,13 @@ func NewServer() *Server {
 	}
 
 	logfile := filepath.Join(dirname, fmt.Sprintf("%s.log", config.Designate))
-	server.engine = gin.New()
-	server.engine.Use(Logger(logfile, mode), gin.Recovery())
+	s.engine = gin.New()
+	s.engine.Use(Logger(logfile, mode), gin.Recovery())
 
 	gob.Register(time.Time{})
 	gob.Register(User{})
 
-	return &server
+	return &s
 }
 
 // Init : initialises the server environment
@@ -125,7 +126,7 @@ func (server *Server) Init() {
 		server.Port = "8180"
 	}
 
-	server.flags = flag.NewFlagSet("serve", flag.ExitOnError)
+	server.flags = flag.NewFlagSet("assemble", flag.ExitOnError)
 	// Setup for command line processing
 	server.flags.StringVar(&server.Dbname, "d", server.Dbname, "Name of the database")
 	server.flags.StringVar(&server.Port, "p", server.Port, "Port for the web-ui")

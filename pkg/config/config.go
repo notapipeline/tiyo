@@ -192,7 +192,7 @@ func NewConfig() (*Config, error) {
 	}
 
 	if len(strings.Split(config.Flow.Host, ".")) == 1 {
-		config.Assemble.Host = config.Flow.Host + "." + config.DNSName
+		config.Flow.Host = config.Flow.Host + "." + config.DNSName
 	}
 
 	if config.Docker.Upstream == "" && config.Docker.Primary != "" {

@@ -279,7 +279,11 @@ func (api *API) PerpetualQueue(c *gin.Context) {
 
 	var count int = 0
 	if err := api.Db.View(func(tx *bolt.Tx) error {
+		log.Infof("Opening queue bucket `%s`", pipeline.BucketName)
 		b := tx.Bucket([]byte("queue")).Bucket([]byte(pipeline.BucketName))
+		if b == nil {
+			return fmt.Errorf("No such bucket `queue` for pipeline %s", pipelineName)
+		}
 		log.Debug("Starting queue count for ", pipelineName)
 		c := b.Cursor()
 		for k, _ := c.First(); k != nil; k, _ = c.Next() {
@@ -313,6 +317,9 @@ func (api *API) walkFiles(pipeline *pipeline.Pipeline, command *pipeline.Command
 		var bucket []byte = []byte("files")
 		if err := api.Db.View(func(tx *bolt.Tx) error {
 			b := tx.Bucket(bucket).Bucket([]byte(pipeline.BucketName))
+			if b == nil {
+				return fmt.Errorf("No such bucket for queue `%s`", pipeline.BucketName)
+			}
 			c := b.Cursor()
 			for k, v := c.Seek([]byte(source)); k != nil && bytes.HasPrefix(k, []byte(source)); k, v = c.Next() {
 				if v != nil {
