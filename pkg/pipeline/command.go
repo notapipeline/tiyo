@@ -113,7 +113,7 @@ type Command struct {
 	FileSeperator string
 }
 
-var regex *regexp.Regexp
+//var regex *regexp.Regexp
 
 // Sanitize a given string, removing any non-alphanumeric characters and replacing them with sep.
 func Sanitize(str string, sep string) string {
@@ -237,6 +237,7 @@ func NewCommand(cell map[string]interface{}) *Command {
 		command.GitRepo = gitRepo
 	}
 
+	fmt.Printf("%+v\n", command)
 	return &command
 }
 
@@ -277,6 +278,7 @@ func (command *Command) GetContainer(asTag bool) string {
 			name = command.Name + "-tiyo:" + command.Version
 		}
 	}
+	fmt.Printf("\n\n=======\n%s\n======\n\n", name)
 	return name
 }
 
@@ -355,11 +357,11 @@ func (command *Command) writeScript() (string, error) {
 
 	file, err := os.Create(name)
 	if err != nil {
-		return "", fmt.Errorf("Failed to create script file for %s. %s", name, err)
+		return "", fmt.Errorf("failed to create script file for %s. %s", name, err)
 	}
 	defer file.Close()
 	if _, err := file.WriteString(content); err != nil {
-		return "", fmt.Errorf("Failed to write script contents for %s. Error was: %s", name, err)
+		return "", fmt.Errorf("failed to write script contents for %s. Error was: %s", name, err)
 	}
 	file.Sync()
 	return name, nil
@@ -540,12 +542,11 @@ func (command *Command) ExecuteForever(cmd *exec.Cmd, done chan error) int {
 	go func() {
 		done <- cmd.Wait()
 	}()
-	select {
-	case err := <-done:
-		if exitError, ok := err.(*exec.ExitError); ok {
-			command.EndTime = time.Now().UnixNano()
-			return exitError.ExitCode()
-		}
+
+	err := <-done
+	if exitError, ok := err.(*exec.ExitError); ok {
+		command.EndTime = time.Now().UnixNano()
+		return exitError.ExitCode()
 	}
 
 	return 0

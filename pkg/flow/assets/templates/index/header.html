@@ -1,0 +1,45 @@
+<header id="top-head" class="uk-position-fixed">
+    <div class="uk-container uk-container-expand uk-background-primary">
+        <nav class="uk-navbar uk-light" data-uk-navbar="mode:click; duration: 250">
+            <div class="uk-navbar-left">
+                <div class="uk-navbar-item uk-hidden@m">
+                    <a class="uk-logo" href="#"><img class="custom-logo" src="/static/img/dashboard-logo-white.svg" alt=""></a>
+                </div>
+                <ul class="uk-navbar-nav uk-visible@m">
+                    <li>
+                        <a href="#">File<span data-uk-icon="icon: triangle-down"></span></a>
+                        <div class="uk-navbar-dropdown">
+                            <ul class="uk-nav uk-navbar-dropdown-nav file">
+                                <li><a><span data-uk-icon="icon: file"></span> New</a></li>
+                                <li><a><span data-uk-icon="icon: file-edit"></span> Open</a></li>
+                            </ul>
+                        </div>
+                    </li>
+                    <li>
+                        <a href="#">Edit<span data-uk-icon="icon: triangle-down"></span></a>
+                        <div class="uk-navbar-dropdown">
+                            <ul class="uk-nav uk-navbar-dropdown-nav edit">
+                                <li><a><span data-uk-icon="icon: file"></span> Environment</a></li>
+                                <li><a><span data-uk-icon="icon: file-edit"></span> Credentials</a></li>
+                            </ul>
+                        </div>
+                    </li>
+
+                </ul>
+            </div>
+            <div class="uk-navbar-right">
+                <ul class="uk-navbar-nav">
+                    <li>
+                        <a class="uk-width-1-1 uk-button uk-button uk-button-small" onclick="pipeline.execute()">Execute</a>
+                    </li>
+                    <li>
+                        <a class="uk-width-1-1 uk-button uk-button uk-button-small" style="color: red;" onclick="pipeline.destroy()" uk-icon="trash">&nbsp;</a>
+                    </li>                            <li>
+                        <a id="play" class="uk-width-1-1 uk-button uk-button uk-button-small" style="color: red;" onclick="pipeline.playpause()" uk-icon="ban">&nbsp;</a>
+                    </li>
+                </ul>
+            </div>
+        </nav>
+    </div>
+</header>
+

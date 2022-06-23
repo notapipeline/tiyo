@@ -14,15 +14,15 @@ import (
 	"path/filepath"
 
 	"github.com/notapipeline/tiyo/pkg/config"
-	"github.com/notapipeline/tiyo/pkg/fill"
-	"github.com/notapipeline/tiyo/pkg/flow"
-	"github.com/notapipeline/tiyo/pkg/server"
-	"github.com/notapipeline/tiyo/pkg/syphon"
+	//	"github.com/notapipeline/tiyo/pkg/fill"
+	"github.com/notapipeline/tiyo/pkg/flow/server"
+	//	"github.com/notapipeline/tiyo/pkg/server"
+	//	"github.com/notapipeline/tiyo/pkg/syphon"
 	log "github.com/sirupsen/logrus"
 )
 
 // VERSION : The applications current version number
-const VERSION string = "v0.0.1a"
+var VERSION string
 
 // Command : define the main interface for sub-commands
 //
@@ -35,7 +35,6 @@ type Command interface {
 
 // static list of subcommands accepted by tiyo
 var acceptedCommands = []string{
-	"assemble",
 	"fill",
 	"flow",
 	"crypt",
@@ -112,16 +111,13 @@ func Run(args []string) int {
 	case "version":
 		fmt.Printf("%s version %s\n", filepath.Base(os.Args[0]), VERSION)
 		return 0
-	case "assemble":
-		instance = server.NewServer()
-	case "fill":
-		instance = fill.NewFill()
-	case "flow":
-		instance = flow.NewFlow()
-		break
-	case "syphon":
+	/*case "syphon":
 		instance = syphon.NewSyphon()
 		break
+	case "fill":
+		instance = fill.NewFill()*/
+	case "flow":
+		instance = server.NewServer()
 	}
 
 	if instance != nil {

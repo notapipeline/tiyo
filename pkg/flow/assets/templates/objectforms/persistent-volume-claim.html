@@ -1,0 +1,34 @@
+<div class="sourceProperties properties">
+    <h4></h4>
+    <form>
+        <table>
+            <tr>
+                <td><label for="sourcename">Name</label></td>
+                <td><input id="sourcename" value="" /></td>
+            </tr>
+            <tr>
+                <td><label for="storageclass">Storage class</label></td>
+                <td><input id="storageclass" value="" /></td>
+            </tr>
+            <tr>
+                <td><label for="size">Size</label></td>
+                <td><input id="size" value="" /></td>
+            </tr>
+            <tr>
+                <td><label for="accessmode">Access mode</label></td>
+                <td>
+                    <select name="accessmode">
+                        <option value="readwriteonce" selected>Read write once</option>
+                        <option value="readwritemany">Read write many</option>
+                        <option value="readonlymany">Read only many</option>
+                        <option value="readwriteoncepod">Read write once pod</option>
+                    </select>
+                </td>
+            </tr>
+        </table>
+        <div style="float: right;">
+            <a class="uk-button-small cancel">cancel</a>
+            <a class="uk-button-small uk-button-primary done">done</a>
+        </div>
+    </form>
+</div>'

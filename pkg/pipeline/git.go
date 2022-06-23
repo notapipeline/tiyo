@@ -138,11 +138,11 @@ func (gitRepo *GitRepo) sshAuth(key string, password string) error {
 	if _, err := os.Stat(key); err != nil {
 		file, err := os.Create(gitRepo.keyfile)
 		if err != nil {
-			return fmt.Errorf("Failed to Create SSH key for %s. %s", gitRepo.RepoURL, err)
+			return fmt.Errorf("failed to Create SSH key for %s. %s", gitRepo.RepoURL, err)
 		}
 		defer file.Close()
 		if _, err := file.WriteString(key); err != nil {
-			return fmt.Errorf("Failed to write ssh key contents for %s. Error was: %s", gitRepo.RepoURL, err)
+			return fmt.Errorf("failed to write ssh key contents for %s. Error was: %s", gitRepo.RepoURL, err)
 		}
 
 		return fmt.Errorf("read file %s failed %s", key, err.Error())

@@ -31,7 +31,7 @@ type Container struct {
 	Children []string
 
 	// The type of container
-	SetType string
+	SourceType string
 
 	// The containers state (Building, Ready, Destroying)
 	State string
@@ -62,8 +62,8 @@ func NewContainer(pipeline *Pipeline, cell map[string]interface{}) *Container {
 		container.Name = Sanitize(cell["name"].(string), "-")
 	}
 
-	if cell["settype"] != nil {
-		container.SetType = cell["settype"].(string)
+	if cell["sourcetype"] != nil {
+		container.SourceType = cell["sourcetype"].(string)
 	}
 
 	if cell["scale"] != nil {

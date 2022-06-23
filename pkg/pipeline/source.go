@@ -23,11 +23,15 @@ type Source struct {
 
 	// The source type of this element
 	Type string `json:"sourcetype"`
+
+	// Attributes of the source
+	Attributes map[string]string
 }
 
 // NewSource : create a new source object
 func NewSource(cell map[string]interface{}) *Source {
 	source := Source{}
+	source.Attributes = make(map[string]string)
 	if cell["id"] != nil {
 		source.ID = cell["id"].(string)
 	}
@@ -38,6 +42,17 @@ func NewSource(cell map[string]interface{}) *Source {
 
 	if cell["sourcetype"] != nil {
 		source.Type = cell["sourcetype"].(string)
+	}
+
+	switch source.Type {
+	case "persistent-volume-claim":
+		fallthrough
+	case "persistent-volume":
+		if cell["attributes"] != nil {
+			for k, v := range cell["attributes"].(map[string]string) {
+				source.Attributes[k] = v
+			}
+		}
 	}
 
 	return &source

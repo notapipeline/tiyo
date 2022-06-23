@@ -11,12 +11,8 @@
 package pipeline
 
 import (
-	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
-	"io/ioutil"
-	"net/http"
 	"regexp"
 	"strings"
 
@@ -407,50 +403,23 @@ func (pipeline *Pipeline) ContainerFromCommandID(commandID string) *Container {
 }
 
 // GetPipeline : Load a pipeline by name from the bolt store and return a new pipeline
-func GetPipeline(config *config.Config, name string) (*Pipeline, error) {
+func GetPipeline(pipelineJSON string, config *config.Config) (*Pipeline, error) {
 	pipeline := Pipeline{}
-	pipeline.Name = name
-	pipeline.DNSName = Sanitize(name, "-")
-	pipeline.Fqdn = pipeline.DNSName + "." + config.DNSName
-	pipeline.BucketName = Sanitize(name, "_")
+	pipeline.Config = config
 	pipeline.Commands = make(map[string]*Command)
 	pipeline.Links = make(map[string]*LinkInterface)
 	pipeline.Containers = make(map[string]*Container)
 	pipeline.Sources = make(map[string]*Source)
-	pipeline.Config = config
 	pipeline.Environment = make([]string, 0)
 	pipeline.Credentials = make(map[string]string)
 
-	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: config.UseInsecureTLS}
-	// Do not use pipeline.Name here - that has been Sanitized and will not match
-	response, err := http.Get(fmt.Sprintf("%s/api/v1/bucket/pipeline/%s", config.AssembleServer(), name))
-	if err != nil {
-		return nil, err
-	}
-
-	defer response.Body.Close()
-	message := struct {
-		Code    int    `json:"code"`
-		Result  string `json:"result"`
-		Message string `json:"message"`
-	}{}
-
-	body, err := ioutil.ReadAll(response.Body)
-	if err != nil {
-		return nil, err
-	}
-	err = json.Unmarshal(body, &message)
-	if err != nil {
-		return nil, err
-	}
-
-	pipelineJSON, err := base64.StdEncoding.DecodeString(string(message.Message))
+	pjbytes, err := base64.StdEncoding.DecodeString(pipelineJSON)
 	if err != nil {
 		return nil, err
 	}
 
 	var content map[string]interface{}
-	err = json.Unmarshal(pipelineJSON, &content)
+	err = json.Unmarshal(pjbytes, &content)
 	if err != nil {
 		return nil, err
 	}
@@ -494,11 +463,13 @@ func GetPipeline(config *config.Config, name string) (*Pipeline, error) {
 			pipeline.Sources[source.ID] = source
 		case "link":
 			link := NewLink(cell)
-			switch link.(type) {
+			switch x := link.(type) {
 			case *PathLink:
-				pipeline.Links[link.(*PathLink).ID] = &link
+				//pipeline.Links[link.(*PathLink).ID] = &link
+				pipeline.Links[x.ID] = &link
 			case *PortLink:
-				pipeline.Links[link.(*PortLink).ID] = &link
+				//pipeline.Links[link.(*PortLink).ID] = &link
+				pipeline.Links[x.ID] = &link
 			}
 		}
 	}

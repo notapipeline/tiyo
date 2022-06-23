@@ -21,7 +21,7 @@ func (c *Config) ResetTotp(email string) (*otp.Key, error) {
 func (c *Config) GenerateTOTP(email string) (*otp.Key, error) {
 	key, err := totp.Generate(
 		totp.GenerateOpts{
-			Issuer:      c.Assemble.Host,
+			Issuer:      c.Flow.Hostname,
 			AccountName: email,
 		},
 	)
