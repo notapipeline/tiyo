@@ -71,10 +71,12 @@ func NewKubernetes(config *config.Config, pipeline *pipeline.Pipeline) (*Kuberne
 
 	var err error
 
-	log.Info("Loading config file from ", config.Kubernetes.ConfigFile)
-	kube.KubeConfig, err = clientcmd.BuildConfigFromFlags("", config.Kubernetes.ConfigFile)
-	if err != nil {
-		return nil, err
+	if kube.KubeConfig, err = rest.InClusterConfig(); err != nil {
+		log.Info("Unable to directly use API, will try local config. %s", err.Error())
+		log.Info("Loading config file from ", config.Kubernetes.ConfigFile)
+		if kube.KubeConfig, err = clientcmd.BuildConfigFromFlags("", config.Kubernetes.ConfigFile); err != nil {
+			return nil, err
+		}
 	}
 
 	kube.ClientSet, err = kubernetes.NewForConfig(kube.KubeConfig)
