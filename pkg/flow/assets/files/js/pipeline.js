@@ -63,7 +63,7 @@ class Pipeline {
             background: {
                 color: 'rgba(232, 232, 232, 0.3)'
             },
-            defaultLink: collections.link.clone('file'),
+            //defaultLink: collections.link.clone('file'),
             markAvailable: true,
             validateConnection: function(viewS, magnetS, viewT, magnetT) {
                 if (magnetS && magnetS.getAttribute('port-group') === 'in') return false;
@@ -71,11 +71,6 @@ class Pipeline {
                 return magnetT && magnetT.getAttribute('port-group') === 'in';
             },
         });
-        $('#play').attr('uk-icon', 'ban');
-        $('#play').css({
-            color: '#FF0000',
-        });
-        this.makeGauges();
     }
 
     save() {

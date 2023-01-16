@@ -14,7 +14,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"regexp"
-	"strings"
 
 	"github.com/notapipeline/tiyo/pkg/config"
 	log "github.com/sirupsen/logrus"
@@ -36,7 +35,7 @@ type Pipeline struct {
 	BucketName string
 
 	// A list of container group objects
-	Containers map[string]*Container
+	Controllers map[string]*Controller
 
 	// Commands which become docker containers in their own right
 	Commands map[string]*Command
@@ -59,12 +58,12 @@ type Pipeline struct {
 
 // GetParent : Gets the parent (if any) of the current command element
 // returns nil if not found
-func (pipeline *Pipeline) GetParent(command *Command) *Container {
+func (pipeline *Pipeline) GetParent(command *Command) *Controller {
 	var id string = command.Parent
-	if _, ok := pipeline.Containers[id]; !ok {
+	if _, ok := pipeline.Controllers[id]; !ok {
 		return nil
 	}
-	return pipeline.Containers[id]
+	return pipeline.Controllers[id]
 }
 
 // GetCommand : Gets the command at a given ID
@@ -363,52 +362,13 @@ func (pipeline *Pipeline) WatchItems() []Matcher {
 	return watch
 }
 
-// CommandFromContainerName : Get a command id from its final image name
-func (pipeline *Pipeline) CommandFromContainerName(kubernetesGroup string, image string) *Command {
-	var instances []*Command
-	for _, group := range pipeline.Containers {
-		if strings.HasSuffix(kubernetesGroup, group.Name) {
-			instances = group.GetChildren()
-		}
-	}
-
-	for _, command := range instances {
-		if command.Name == image {
-			return command
-		}
-	}
-	return nil
-}
-
-// ContainerFromServiceName : Get a container for a given kubernetes service
-func (pipeline *Pipeline) ContainerFromServiceName(serviceName string) *Container {
-	for _, group := range pipeline.Containers {
-		if strings.HasSuffix(serviceName, group.Name) {
-			return group
-		}
-	}
-	return nil
-}
-
-// ContainerFromCommandID : Get a container from a command id
-func (pipeline *Pipeline) ContainerFromCommandID(commandID string) *Container {
-	for _, container := range pipeline.Containers {
-		for _, element := range container.GetChildren() {
-			if element.ID == commandID {
-				return container
-			}
-		}
-	}
-	return nil
-}
-
 // GetPipeline : Load a pipeline by name from the bolt store and return a new pipeline
 func GetPipeline(pipelineJSON string, config *config.Config) (*Pipeline, error) {
 	pipeline := Pipeline{}
 	pipeline.Config = config
 	pipeline.Commands = make(map[string]*Command)
 	pipeline.Links = make(map[string]*LinkInterface)
-	pipeline.Containers = make(map[string]*Container)
+	pipeline.Controllers = make(map[string]*Controller)
 	pipeline.Sources = make(map[string]*Source)
 	pipeline.Environment = make([]string, 0)
 	pipeline.Credentials = make(map[string]string)
@@ -455,9 +415,9 @@ func GetPipeline(pipelineJSON string, config *config.Config) (*Pipeline, error) 
 				command.Tag = pipeline.Config.Docker.Registry + "/" + command.Tag
 			}
 			pipeline.Commands[command.ID] = command
-		case "container.Kubernetes":
-			container := NewContainer(&pipeline, cell)
-			pipeline.Containers[container.ID] = container
+		case "container.Controller":
+			controller := NewController(&pipeline, cell)
+			pipeline.Controllers[controller.ID] = controller
 		case "container.Source":
 			source := NewSource(cell)
 			pipeline.Sources[source.ID] = source

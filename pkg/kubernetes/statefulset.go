@@ -65,7 +65,7 @@ func (kube *Kubernetes) GetStatefulSetContainers(instances []*pipeline.Command) 
 }
 
 // DestroyStatefulSet : Destroys a given statefulset and all resources under it
-func (kube *Kubernetes) DestroyStatefulSet(pipeline string, container *pipeline.Container) {
+func (kube *Kubernetes) DestroyStatefulSet(pipeline string, container *pipeline.Controller) {
 	var name string = pipeline + "-" + container.Name
 	log.Info("Deleting stateful set ", name)
 	client := kube.ClientSet.AppsV1().StatefulSets(kube.Config.Kubernetes.Namespace)
@@ -91,7 +91,7 @@ func (kube *Kubernetes) DestroyStatefulSet(pipeline string, container *pipeline.
 }
 
 // CreateStatefulSet : Create a new statefulset
-func (kube *Kubernetes) CreateStatefulSet(pipeline string, container *pipeline.Container) {
+func (kube *Kubernetes) CreateStatefulSet(pipeline string, container *pipeline.Controller) {
 	var name string = pipeline + "-" + container.Name
 	client := kube.ClientSet.AppsV1().StatefulSets(kube.Config.Kubernetes.Namespace)
 	instances := container.GetChildren()

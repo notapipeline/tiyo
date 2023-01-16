@@ -57,7 +57,7 @@ func (kube *Kubernetes) PodStatus(name string) (map[string]PodsStatus, error) {
 				reason = container.State.Terminated.Reason
 			}
 			if _, ok := cstatus[image]; !ok {
-				var c *pipeline.Command = kube.Pipeline.CommandFromContainerName(name, image)
+				var c *pipeline.Command = kube.Pipeline.CommandFromControllerName(name, image)
 				var id string = ""
 				if c != nil {
 					id = c.ID

@@ -6,7 +6,9 @@
 
 package server
 
-func (server *Server) setupRoutes(bfs *BinFileSystem) {
+import "github.com/notapipeline/tiyo/pkg/flow/server/api"
+
+func (server *Server) setupRoutes(bfs *api.BinFileSystem) {
 	server.router.Use(server.RequireAccount)
 
 	server.engine.GET("/configure", server.Configure)
@@ -14,17 +16,27 @@ func (server *Server) setupRoutes(bfs *BinFileSystem) {
 
 	// page methods
 	server.router.GET("/", server.Index)
-	server.router.GET("/pipeline", server.Index)
+	/*server.router.GET("/pipeline", server.Index)
 	server.router.GET("/objectforms/:formname", server.ObjectForms)
 	server.router.GET("/scan", server.Index)
 	server.router.GET("/scan/:bucket", server.Index)
-	server.router.GET("/buckets", server.Index)
+	server.router.GET("/buckets", server.Index)*/
 	server.router.GET("/login", server.Signin)
 	server.router.POST("/login", server.Signin)
 	server.router.GET("/logout", server.Signout)
 
+	// Page bindings
+	server.engine.GET("/api/v1/sidebar", server.api.GetSidebar)
+
+	// Flow bindings
+	server.engine.GET("/api/v1/status/:pipeline", server.api.FlowStatus)
+	server.engine.POST("/api/v1/execute", server.api.ExecuteFlow)
+	server.engine.POST("/api/v1/startflow", server.api.StartFlow)
+	server.engine.POST("/api/v1/stopflow", server.api.StopFlow)
+	server.engine.POST("/api/v1/destroyflow", server.api.DestroyFlow)
+
 	// api methods
-	server.engine.GET("/api/v1/bucket", server.api.Buckets)
+	/*server.engine.GET("/api/v1/bucket", server.api.Buckets)
 	server.engine.GET("/api/v1/bucket/:bucket/:child", server.api.Get)
 	server.engine.GET("/api/v1/bucket/:bucket/:child/*key", server.api.Get)
 
@@ -48,14 +60,9 @@ func (server *Server) setupRoutes(bfs *BinFileSystem) {
 	server.engine.GET("/api/v1/popqueue/:pipeline/:key", server.api.PopQueue)
 	server.engine.POST("/api/v1/perpetualqueue", server.api.PerpetualQueue)
 
-	server.engine.GET("/api/v1/status/:pipeline", server.api.FlowStatus)
-	server.engine.POST("/api/v1/execute", server.api.ExecuteFlow)
-	server.engine.POST("/api/v1/startflow", server.api.StartFlow)
-	server.engine.POST("/api/v1/stopflow", server.api.StopFlow)
-	server.engine.POST("/api/v1/destroyflow", server.api.DestroyFlow)
 	server.engine.POST("/api/v1/encrypt", server.api.Encrypt)
 	server.engine.POST("/api/v1/decrypt", server.api.Decrypt)
 
 	server.engine.POST("/addmachine", server.addmachine)
-	server.engine.GET("/hmac", server.hmac)
+	server.engine.GET("/hmac", server.hmac)*/
 }

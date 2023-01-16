@@ -19,11 +19,11 @@ build: clean mod bindata.go ## Build the binary
 	@echo "+++ ${APPNAME} compiled"
 
 clean:  ## Remove old binaries
-	rm -f ${APPNAME} pkg/flow/server/assets.go
+	rm -f ${APPNAME} pkg/flow/server/api/assets.go
 
 bindata.go: $(BINDATA)
 	@echo "Creating assets.go..."
-	@go-bindata -o pkg/flow/server/assets.go --pkg server pkg/flow/assets/...
+	@go-bindata -o pkg/flow/server/api/assets.go --pkg api pkg/flow/assets/...
 	@echo "+++ assets.go created"
 
 mod: # run go mod in 1.17 compatibility mode only

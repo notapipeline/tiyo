@@ -113,8 +113,6 @@ type Command struct {
 	FileSeperator string
 }
 
-//var regex *regexp.Regexp
-
 // Sanitize a given string, removing any non-alphanumeric characters and replacing them with sep.
 func Sanitize(str string, sep string) string {
 	regex, err := regexp.Compile("[^a-zA-Z0-9]+")
@@ -587,4 +585,21 @@ func (command *Command) recreateWorkspace() {
 	if err == nil {
 		os.Mkdir("workspace", 0775)
 	}
+}
+
+// CommandFromContainerName : Get a command id from its final image name
+func (pipeline *Pipeline) CommandFromControllerName(controllerName string, image string) *Command {
+	var instances []*Command
+	for _, controller := range pipeline.Controllers {
+		if strings.HasSuffix(controllerName, controller.Name) {
+			instances = controller.GetChildren()
+		}
+	}
+
+	for _, command := range instances {
+		if command.Name == image {
+			return command
+		}
+	}
+	return nil
 }

@@ -185,19 +185,21 @@ func (server *Server) Engine() *gin.Engine {
 
 // Run : runs the server component when activated via main
 func (server *Server) Run() int {
-	log.Info("starting server.apidb-browser..")
-
 	var (
 		err error
-		db  string = server.config.DbDir + "/" + server.Dbname
+		db  string             = server.config.DbDir + "/" + server.Dbname
+		bfs *api.BinFileSystem = api.GetBinFileSystem("pkg/flow/assets/files")
 	)
 
-	server.api, err = api.NewAPI(db, server.config)
+	server.api, err = api.NewAPI(db, server.config, bfs)
 	if err != nil {
 		fmt.Println(err)
 		return 1
 	}
-	bfs := GetBinFileSystem("pkg/flow/assets/files")
+
+	f := api.NewFlow(server.api)
+	f.SetupKubernetesOnly()
+
 	server.engine.Use(static.Serve("/static", bfs))
 	server.setupRoutes(bfs)
 
@@ -209,6 +211,7 @@ func (server *Server) Run() int {
 	render.Add("error", LoadTemplates("error.tpl", "header.html", "footer.html"))
 	server.engine.HTMLRender = render
 
+	log.Info("starting server.apidb-browser..")
 	host := fmt.Sprintf("%s:%d", server.config.Flow.Hostname, server.config.Flow.Port)
 	log.Info(host)
 	if server.config.Flow.Cacert != "" && server.config.Flow.Cakey != "" {

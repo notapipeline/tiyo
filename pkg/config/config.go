@@ -144,6 +144,9 @@ type Config struct {
 	// Config for SAML 2fa
 	SAML *SAML `yaml:"samli,omitempty"`
 
+	// Contains a string map of schema URIs to URL locations
+	Schemas map[string]string `yaml:"schemas"`
+
 	// Base directory for configuration files - default /etc/tiyo
 	ConfigBase string
 

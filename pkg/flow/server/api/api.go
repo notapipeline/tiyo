@@ -49,12 +49,15 @@ type API struct {
 
 	// The current loaded Flow
 	flow *Flow
+
+	bfs *BinFileSystem
 }
 
 // NewAPI : Create a new API instance
-func NewAPI(dbName string, c *config.Config) (*API, error) {
+func NewAPI(dbName string, c *config.Config, bfs *BinFileSystem) (*API, error) {
 	api := API{
 		Config: c,
+		bfs:    bfs,
 	}
 
 	var err error

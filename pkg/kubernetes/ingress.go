@@ -100,7 +100,7 @@ func (kube *Kubernetes) IngressRules(serviceName string, instances []*pipeline.C
 	if kube.Config.ExternalNginx {
 		servicePorts := kube.ServiceNodePorts(serviceName)
 		log.Debug("Firing Create nginx config with ", rules, servicePorts)
-		container := kube.Pipeline.ContainerFromServiceName(serviceName)
+		container := kube.Pipeline.ControllerFromServiceName(serviceName)
 		if container != nil {
 			nginx.CreateNginxConfig(kube.Config, serviceName, rules, servicePorts)
 		}

@@ -276,6 +276,10 @@ form.uk-panel-box {
     border-radius: 10px;
     display: none;
     z-index: 1000;
+
+    /*max-width: 800px;
+    max-height: 600px;
+    overflow: scroll;*/
 }
 
 .properties h4 {
@@ -455,7 +459,7 @@ ul#scriptsource li {
 
 .casing header {
     float: left;
-    top: 30px;
+    top: 10px;
     position: relative;
 }
 
@@ -542,4 +546,29 @@ div.success {
 }
 .tool-remove, .marker-vertex-remove-area {
     scale: 0.5;
+}
+
+.properties form {
+    display: block;
+    overflow: scroll;
+    max-width: 800px;
+    max-height: 600px;
+}
+
+.properties .form-group {
+    display: grid;
+}
+
+.properties .form-group label {
+    float: left;
+}
+
+.properties .form-group .controls {
+    float: right;
+}
+
+.properties .form-group .controls .help-block {
+    font-size: 10pt;
+    margin-bottom: 10px;
+    display: block;
 }

@@ -46,28 +46,28 @@ class Base {
 
             // does not work for embedding
             //if ($(target)[0].nodeName == "svg" && $(target)[0].parentElement.id == "paper-pipeline") {
-                this.$type = $(elem).find('img').attr('src').replace(/.*\//, '').split('.')[0];
-                var point = pipeline.getTransformPoint();
-                var source = this.$clonable.clone(this.$type).position(
-                    point.x, point.y
-                ).attr({
-                    '.label': {
-                        text: this.$type,
-                    },
-                    text: {
-                        text: this.$type,
-                    },
-                    image: {
-                        'xlink:href': $(elem).find('img').attr('src'),
-                    },
-                });
-                try {
-                    this.eventsCallback(source);
-                } catch {}
+            this.$type = $(elem).find('img').attr('src').replace(/.*\//, '').split('.')[0];
+            var point = pipeline.getTransformPoint();
+            var source = this.$clonable.clone(this.$type).position(
+                point.x, point.y
+            ).attr({
+                '.label': {
+                    text: this.$type,
+                },
+                text: {
+                    text: this.$type,
+                },
+                image: {
+                    'xlink:href': $(elem).find('img').attr('src'),
+                },
+            });
+            try {
+                this.eventsCallback(source);
+            } catch {}
 
-                source.attributes.name = this.$type;
-                source.attributes.sourcetype = this.$type;
-                pipeline.checkEmbed(source, point);
+            source.attributes.name = this.$type;
+            source.attributes.sourcetype = this.$type;
+            pipeline.checkEmbed(source, point);
             //}
             target = null;
             elem = null;

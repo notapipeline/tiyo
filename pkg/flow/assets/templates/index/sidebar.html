@@ -3,55 +3,6 @@
         <img class="custom-logo" src="/static/img/dashboard-logo.svg" alt="">
     </div>
     <nav class="left-nav-wrap">
-        <ul class="uk-nav uk-nav-default uk-nav-parent-icon">
-            <li>
-                <a href="/">Dashboard</a>
-            </li>
-            <li>
-                <a href="/pipeline">Pipeline</a>
-            </li>
-            <li>
-                <a href="/buckets">Buckets</a>
-            </li>
-        </ul>
+        <ul uk-accordion="multiple: true;"></ul>
     </nav>
-    <ul uk-accordion="multiple: true; collapsible: false;">
-        <li>
-            <a class="uk-accordion-title">Source</a>
-            <div class="uk-accordion-content uk-flex uk-flex-middle uk-margin-bottom">
-                <ul uk-sortable="handle: .source-element" class="uk-grid-stack uk-height-max-large element-list" id="source-element-list"></ul>
-            </div>
-        </li>
-        <li>
-            <a class="uk-accordion-title">Kubernetes</a>
-            <div class="uk-accordion-content uk-flex uk-flex-middle uk-margin-bottom">
-                <ul uk-sortable="handle: .kubernetes-element" class="uk-grid-stack uk-height-max-large element-list" id="kubernetes-element-list"></ul>
-            </div>
-        </li>
-        <li>
-            <a class="uk-accordion-title">Element types</a>
-            <div class="uk-accordion-content uk-flex uk-flex-middle uk-margin-bottom">
-                <ul uk-sortable="handle: .container-element" class="uk-grid-stack uk-height-max-large element-list" id="container-element-list"></ul>
-            </div>
-        </li>
-        <li>
-            <a class="uk-accordion-title">Link types</a>
-            <div class="uk-accordion-content uk-flex uk-flex-middle uk-margin-bottom">
-                <ul uk-sortable="handle: .pipeline-link" class="uk-grid-stack uk-height-max-large element-list" id="pipeline-link-list">
-                    <li class="uk-card uk-card-default uk-card-body element-list-element pipeline-list pipeline-link" uk-tooltip="file connector">
-                        <p>FILE</p>
-                    </li>
-                    <li class="uk-card uk-card-default uk-card-body element-list-element pipeline-link" style="color: blue;" uk-tooltip="tcp connector">
-                        <p>TCP</p>
-                    </li>
-                    <li class="uk-card uk-card-default uk-card-body element-list-element pipeline-link" style="color: orange;" uk-tooltip="udp connector">
-                        <p>UDP</p>
-                    </li>
-                    <li class="uk-card uk-card-default uk-card-body element-list-element pipeline-link" style="color: red;" uk-tooltip="unix socket connector">
-                        <p>SOCKET</p>
-                    </li>
-                </ul>
-            </div>
-        </li>
-    </ul>
 </aside>

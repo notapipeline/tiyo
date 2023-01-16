@@ -45,6 +45,8 @@ class Collection {
         return this.object.groupType;
     }
 
+    // Gets a set of all image icons in a set and configures
+    // the binding for them
     getElements() {
         var elements = [];
         if (this.collectionType == 'link') {
@@ -52,9 +54,11 @@ class Collection {
             return;
         }
         $.get(
+            // Get a list of images from static store
             '/api/v1/collections/' + this.collectionType,
             (data) => {
                 elements = data.message;
+                // sort the elements alphabetically
                 elements.sort(function (a, b) {
                     return a.toLowerCase().localeCompare(b.toLowerCase());
                 });
@@ -123,7 +127,9 @@ class Collection {
                     attrs['element'] = element;
                     attrs['attrs'] = {
                         '.body': {
-                            'xlink:href': 'data:image/svg+xml;utf8,' + encodeURIComponent(new XMLSerializer().serializeToString(data.documentElement))
+                            'xlink:href': 'data:image/svg+xml;utf8,' + encodeURIComponent(
+                                new XMLSerializer().serializeToString(data.documentElement)
+                            )
                         },
                     }
                     this.elements[element] = new joint.shapes.container[this.objectType](attrs);

@@ -8,6 +8,8 @@ package server
 
 import (
 	"html/template"
+
+	"github.com/notapipeline/tiyo/pkg/flow/server/api"
 )
 
 // LoadTemplates : Load HTML template files
@@ -17,7 +19,7 @@ func LoadTemplates(paths ...string) *template.Template {
 	var path string
 	var data []byte
 	for _, path = range paths {
-		data, err = Asset("pkg/flow/assets/templates/" + path)
+		data, err = api.Asset("pkg/flow/assets/templates/" + path)
 		if err != nil {
 			return nil
 		}

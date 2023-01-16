@@ -52,7 +52,7 @@ func (kube *Kubernetes) GetDeploymentContainers(instances []*pipeline.Command) [
 	return containers
 }
 
-func (kube *Kubernetes) DestroyDeployment(pipeline string, container *pipeline.Container) {
+func (kube *Kubernetes) DestroyDeployment(pipeline string, container *pipeline.Controller) {
 	var name string = pipeline + "-" + container.Name
 	log.Info("Deleting Deployment ", name)
 	client := kube.ClientSet.AppsV1().Deployments(kube.Config.Kubernetes.Namespace)
@@ -75,7 +75,7 @@ func (kube *Kubernetes) DestroyDeployment(pipeline string, container *pipeline.C
 	}
 }
 
-func (kube *Kubernetes) CreateDeployment(pipeline string, container *pipeline.Container) {
+func (kube *Kubernetes) CreateDeployment(pipeline string, container *pipeline.Controller) {
 	var name string = pipeline + "-" + container.Name
 	instances := container.GetChildren()
 

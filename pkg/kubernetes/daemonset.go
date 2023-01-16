@@ -38,7 +38,7 @@ func (kube *Kubernetes) DaemonSetExists(name string) bool {
 	return false
 }
 
-func (kube *Kubernetes) DestroyDaemonSet(pipeline string, container *pipeline.Container) {
+func (kube *Kubernetes) DestroyDaemonSet(pipeline string, container *pipeline.Controller) {
 	var name string = pipeline + "-" + container.Name
 	log.Info("Deleting DaemonSet ", name)
 	client := kube.ClientSet.AppsV1().DaemonSets(kube.Config.Kubernetes.Namespace)
@@ -61,7 +61,7 @@ func (kube *Kubernetes) DestroyDaemonSet(pipeline string, container *pipeline.Co
 	}
 }
 
-func (kube *Kubernetes) CreateDaemonSet(pipeline string, container *pipeline.Container) {
+func (kube *Kubernetes) CreateDaemonSet(pipeline string, container *pipeline.Controller) {
 	var name string = pipeline + "-" + container.Name
 	client := kube.ClientSet.AppsV1().DaemonSets(kube.Config.Kubernetes.Namespace)
 

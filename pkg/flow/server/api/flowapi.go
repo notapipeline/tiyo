@@ -139,9 +139,9 @@ func (api *API) FlowStatus(c *gin.Context) {
 
 	// Get containers from pipeline, then attach build status for each
 	groups := make(map[string]interface{})
-	for id, container := range api.flow.Pipeline.Containers {
-		group := make(map[string]interface{})
-		podState, err := api.flow.Kubernetes.PodStatus(strings.Join([]string{api.flow.Pipeline.DNSName, container.Name}, "-"))
+	for id, controller := range api.flow.Pipeline.Controllers {
+		current := make(map[string]interface{})
+		podState, err := api.flow.Kubernetes.PodStatus(strings.Join([]string{api.flow.Pipeline.DNSName, controller.Name}, "-"))
 		if err != nil {
 			log.Error(err)
 			continue
@@ -154,19 +154,19 @@ func (api *API) FlowStatus(c *gin.Context) {
 			}
 		}
 
-		var equals bool = int32(len(podState)) == container.Scale
-		if container.LastCount > len(podState) {
-			container.State = "Terminated"
-		} else if container.LastCount < len(podState) {
-			container.State = "Creating"
+		var equals bool = int32(len(podState)) == controller.Scale
+		if controller.LastCount > len(podState) {
+			controller.State = "Terminated"
+		} else if controller.LastCount < len(podState) {
+			controller.State = "Creating"
 		} else if equals {
-			container.State = "Ready"
+			controller.State = "Ready"
 		}
-		container.LastCount = len(podState)
+		controller.LastCount = len(podState)
 
-		group["state"] = container.State
-		group["pods"] = podState
-		groups[id] = group
+		current["state"] = controller.State
+		current["pods"] = podState
+		groups[id] = current
 	}
 	response["groups"] = groups
 	if notready {

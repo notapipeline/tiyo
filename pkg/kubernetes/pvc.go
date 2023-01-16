@@ -31,7 +31,7 @@ func (kube *Kubernetes) PvcExists(name string) bool {
 	return false
 }
 
-func (kube *Kubernetes) CreatePvc(pipeline string, container *pipeline.Container) {
+func (kube *Kubernetes) CreatePvc(pipeline string, container *pipeline.Controller) {
 	var name string = pipeline + "-" + container.Name
 	client := kube.ClientSet.CoreV1().PersistentVolumeClaims(kube.Config.Kubernetes.Namespace)
 	//instance := container.GetChildren()

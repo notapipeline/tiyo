@@ -11,14 +11,23 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/notapipeline/tiyo/pkg/config"
 	"github.com/notapipeline/tiyo/pkg/pipeline"
 	log "github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/client-go/kubernetes"
+	_ "k8s.io/client-go/plugin/pkg/client/auth/oidc"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/kubectl/pkg/scheme"
+)
+
+const (
+	QPS   = 200
+	BURST = 2 * QPS
 )
 
 // ContainerStatus : A struct holding the status of a container
@@ -44,6 +53,11 @@ type PodsStatus struct {
 	Containers map[string]ContainerStatus `json:"containers"`
 }
 
+type LockableApiResource struct {
+	sync.RWMutex
+	Content map[string][]ApiResource
+}
+
 // Kubernetes : Construction struct for Kubernetes
 type Kubernetes struct {
 
@@ -53,19 +67,38 @@ type Kubernetes struct {
 	// Kubernetes clientset for connections
 	ClientSet *kubernetes.Clientset
 
+	// Rest client for raw api access
+	RestClient *rest.RESTClient
+
 	// tiyo config file
 	Config *config.Config
 
 	// The pipeline for the current build
 	Pipeline *pipeline.Pipeline
+
+	// Api resources as a locked content for periodic reloading
+	ApiResources LockableApiResource
+}
+
+func contains(what string, where []string) bool {
+	for _, v := range where {
+		if what == v {
+			return true
+		}
+	}
+	return false
 }
 
 // NewKubernetes : Create a new Kubernetes engine
 func NewKubernetes(config *config.Config, pipeline *pipeline.Pipeline) (*Kubernetes, error) {
 	log.Info("Initialising Kubernetes engine")
+
 	kube := Kubernetes{
 		Pipeline: pipeline,
 		Config:   config,
+		ApiResources: LockableApiResource{
+			Content: make(map[string][]ApiResource),
+		},
 	}
 
 	var err error
@@ -80,6 +113,16 @@ func NewKubernetes(config *config.Config, pipeline *pipeline.Pipeline) (*Kuberne
 
 	kube.ClientSet, err = kubernetes.NewForConfig(kube.KubeConfig)
 	if err != nil {
+		return nil, err
+	}
+
+	c := *kube.KubeConfig
+	c.NegotiatedSerializer = serializer.NewCodecFactory(scheme.Scheme)
+	c.UserAgent = rest.DefaultKubernetesUserAgent()
+	c.QPS = QPS
+	c.Burst = BURST
+
+	if kube.RestClient, err = rest.UnversionedRESTClientFor(&c); err != nil {
 		return nil, err
 	}
 

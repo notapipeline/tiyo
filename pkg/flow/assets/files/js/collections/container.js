@@ -14,7 +14,6 @@ class Container extends Base {
 
     attributes(view, event, x, y) {
         var element = $('.applicationProperties');
-        console.log(element);
         element.find('h4').text('application properties');
 
         $('#appname').prop('disabled', false);
@@ -86,7 +85,9 @@ class Container extends Base {
 
 joint.shapes.container.Container = joint.shapes.devs.Model.extend({
     defaults: joint.util.deepSupplement({
-        markup: '<g class="rotatable"><g class="scalable"><image class="body"/></g><text class="label"/><rect class="progress" /><g class="inPorts"/><g class="outPorts"/></g>',
+        markup: '<g class="rotatable"><g class="scalable"><image class="body"/>'+
+            '</g><text class="label"/><rect class="progress" /><g class="inPorts"/>'+
+            '<g class="outPorts"/></g>',
         type: 'container.Container',
         perpendicularLinks: true,
 
