@@ -71,15 +71,18 @@ var metadata map[string]map[string]string = map[string]map[string]string{
 
 // ApiResource contains the APIGroup and APIResource
 type ApiResource struct {
-	Group         string `json:"group"`
-	Version       string `json:"version"`
-	Collection    string `json:"collection"`
-	Kind          string `json:"kind"`
-	Package       string `json:"package"`
-	Provider      string `json:"provider"`
-	Native        bool   `json:"native"`
-	IsCollection  bool   `json:"isCollection"`
-	IsCollectable bool   `json:"isCollectable"`
+	Icon          string   `json:"icon"`
+	Schema        string   `json:"schema"`
+	Group         string   `json:"group"`
+	Version       string   `json:"version"`
+	Collection    string   `json:"collection"`
+	Kind          string   `json:"kind"`
+	Package       string   `json:"package"`
+	Provider      string   `json:"provider"`
+	Native        bool     `json:"native"`
+	IsCollection  bool     `json:"isCollection"`
+	IsCollectable bool     `json:"isCollectable"`
+	LinkableTo    []string `json:"linkableTo"`
 
 	Resource metav1.APIResource
 }
@@ -301,6 +304,7 @@ func (kube *Kubernetes) parseApiResource(resource metav1.APIResource, gv schema.
 		collection    bool
 		collectable   bool
 		err           error
+		links         []string
 	)
 
 	{
@@ -341,7 +345,7 @@ func (kube *Kubernetes) parseApiResource(resource metav1.APIResource, gv schema.
 	}
 
 	if v3 != nil {
-		collectable = kube.isCollectable(v3, resource.Kind)
+		collectable, links = kube.isCollectable(v3)
 	}
 
 	rc <- apiResource{
@@ -355,15 +359,17 @@ func (kube *Kubernetes) parseApiResource(resource metav1.APIResource, gv schema.
 			Native:        isNative,
 			IsCollection:  collection,
 			IsCollectable: collectable,
+			LinkableTo:    links,
 			Resource:      resource,
 		},
 		err: err,
 	}
 }
 
-func (kube *Kubernetes) isCollectable(v3 *Version3, kd string) bool {
+func (kube *Kubernetes) isCollectable(v3 *Version3) (bool, []string) {
+	var links []string = make([]string, 0)
 	if v3 == nil {
-		return false
+		return false, links
 	}
 	var flat map[string]interface{} = Flatten((*v3).Properties)
 	for k := range flat {
@@ -371,14 +377,20 @@ func (kube *Kubernetes) isCollectable(v3 *Version3, kd string) bool {
 		i := strings.ToLower(p[len(p)-2])
 		if i != "id" && strings.HasSuffix(i, "id") {
 			i = strings.TrimSuffix(string(i[0])+i[1:], "id")
-			if i == "instance" {
-				fmt.Printf("%s requires %s\n", kd, i)
-			}
 			kube.addCollectionType(i)
-			return true
+			var added bool = false
+			for _, s := range links {
+				if s == i {
+					added = true
+					break
+				}
+			}
+			if !added {
+				links = append(links, i)
+			}
 		}
 	}
-	return false
+	return len(links) > 0, links
 }
 
 func (kube *Kubernetes) isCollection(kind string) (si bool) {

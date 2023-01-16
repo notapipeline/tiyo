@@ -10,17 +10,6 @@ import (
 	"github.com/notapipeline/tiyo/pkg/kubernetes"
 )
 
-type sidebarEntry struct {
-	Icon          string `json:"icon"`
-	Schema        string `json:"schema"`
-	Group         string `json:"group"`
-	Version       string `json:"version"`
-	Kind          string `json:"kind"`
-	IsCollection  bool   `json:"isCollection"`  // Is this item a collection
-	IsCollectable bool   `json:"isCollectable"` // can this item belong to a Collection
-	IsNative      bool   `json:"isNative"`      // Is this a kubernetes builtin
-}
-
 func (api *API) waitForApiResourceContent() {
 	for {
 		var ready bool = false
@@ -41,7 +30,7 @@ func (api *API) waitForApiResourceContent() {
 
 func (api *API) GetSidebar(c *gin.Context) {
 	var (
-		sidebar   map[string]map[string][]sidebarEntry = make(map[string]map[string][]sidebarEntry)
+		sidebar   map[string]map[string][]kubernetes.ApiResource = make(map[string]map[string][]kubernetes.ApiResource)
 		resources map[string][]kubernetes.ApiResource
 	)
 	api.waitForApiResourceContent()
@@ -61,20 +50,11 @@ func (api *API) GetSidebar(c *gin.Context) {
 			}
 		}
 		if !exists {
-			sidebar[k] = make(map[string][]sidebarEntry)
+			sidebar[k] = make(map[string][]kubernetes.ApiResource)
 		}
 
 		for _, r := range item {
-			var current sidebarEntry = sidebarEntry{
-				Group:         r.Group,
-				Version:       r.Version,
-				Kind:          r.Kind,
-				IsCollection:  r.IsCollection,
-				IsCollectable: r.IsCollectable,
-				IsNative:      r.Native,
-				// This will be the default icon if no other icon is found.
-				Icon: "/static/img/icons/kubernetes/miscellaneous/compositeresourcedefinition.svg",
-			}
+			r.Icon = "/static/img/icons/kubernetes/miscellaneous/compositeresourcedefinition.svg"
 			exists = false
 			var cgroup = strings.ToLower(r.Group)
 			for sk := range sidebar[k] {
@@ -83,7 +63,7 @@ func (api *API) GetSidebar(c *gin.Context) {
 				}
 			}
 			if !exists {
-				sidebar[k][cgroup] = make([]sidebarEntry, 0)
+				sidebar[k][cgroup] = make([]kubernetes.ApiResource, 0)
 			}
 
 			var found []string = make([]string, 0)
@@ -111,7 +91,7 @@ func (api *API) GetSidebar(c *gin.Context) {
 					continue
 				}
 			case 1:
-				current.Icon = "/static/" + found[0]
+				r.Icon = "/static/" + found[0]
 			default:
 				var extension []string = strings.Split(r.Package, ",")
 				var provider string = r.Package
@@ -121,12 +101,12 @@ func (api *API) GetSidebar(c *gin.Context) {
 				for _, f := range found {
 					if strings.Contains(f, strings.ToLower(fmt.Sprintf("/%s/", provider))) ||
 						strings.Contains(f, strings.ToLower(r.Package)) {
-						current.Icon = "/static/" + f
+						r.Icon = "/static/" + f
 						break
 					}
 				}
 			}
-			sidebar[k][cgroup] = append(sidebar[k][cgroup], current)
+			sidebar[k][cgroup] = append(sidebar[k][cgroup], r)
 		}
 	}
 	c.JSON(200, sidebar)
