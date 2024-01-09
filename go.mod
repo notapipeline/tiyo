@@ -16,7 +16,7 @@ require (
 	github.com/gin-contrib/sessions v0.0.4
 	github.com/gin-contrib/static v0.0.0-20200916080430-d45d9a37d28e
 	github.com/gin-gonic/gin v1.7.7
-	github.com/go-git/go-git/v5 v5.2.0
+	github.com/go-git/go-git/v5 v5.11.0
 	github.com/google/uuid v1.3.0
 	github.com/gorilla/mux v1.8.0 // indirect
 	github.com/moby/term v0.0.0-20201216013528-df9cb8a40635 // indirect
@@ -24,8 +24,8 @@ require (
 	github.com/opencontainers/image-spec v1.0.2 // indirect
 	github.com/pquerna/otp v1.3.0
 	github.com/rjeczalik/notify v0.9.2
-	github.com/sirupsen/logrus v1.8.1
-	golang.org/x/crypto v0.0.0-20210322153248-0c34fe9e7dc2
+	github.com/sirupsen/logrus v1.9.0
+	golang.org/x/crypto v0.16.0
 	k8s.io/api v0.20.6
 	k8s.io/apimachinery v0.20.6
 	k8s.io/client-go v0.20.6
